@@ -20,7 +20,7 @@ const listingSchema = new mongoose.Schema(
     },
     discountPrice: {
       type: Number,
-      required: false,
+      required: true,
     },
     bathrooms: {
       type: Number,
@@ -57,6 +57,19 @@ const listingSchema = new mongoose.Schema(
     approved: {
       type: Boolean,
       default: false,
+      required: true,
+    },
+    rejectionReason: {
+      type: String,
+      default: null,
+    },
+    approvedAt: {
+      type: Date,
+      default: null,
+    },
+    approvedBy: {
+      type: String,
+      default: null,
     },
   },
   { timestamps: true },

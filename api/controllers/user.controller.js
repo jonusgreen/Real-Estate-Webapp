@@ -43,12 +43,22 @@ export const updateUser = async (req, res, next) => {
 }
 
 export const deleteUser = async (req, res, next) => {
-  if (req.user.id !== req.params.id) {
+  // Allow admin to delete any user, or user to delete their own account
+  const isAdmin = req.user.isAdmin
+  const isOwnAccount = req.user.id === req.params.id
+
+  if (!isAdmin && !isOwnAccount) {
     return next(errorHandler(401, "You can only delete your own account!"))
   }
+
   try {
     await User.findByIdAndDelete(req.params.id)
-    res.clearCookie("access_token")
+
+    // Only clear cookie if deleting own account
+    if (isOwnAccount) {
+      res.clearCookie("access_token")
+    }
+
     res.status(200).json("User has been deleted!")
   } catch (error) {
     next(error)
@@ -70,6 +80,14 @@ export const getUserListings = async (req, res, next) => {
 
 export const getUser = async (req, res, next) => {
   try {
+    console.log("getUser called with ID:", req.params.id)
+
+    // Validate that the ID is a valid ObjectId format
+    if (!req.params.id.match(/^[0-9a-fA-F]{24}$/)) {
+      console.log("Invalid ObjectId format:", req.params.id)
+      return next(errorHandler(400, "Invalid user ID format"))
+    }
+
     const user = await User.findById(req.params.id)
 
     if (!user) return next(errorHandler(404, "User not found!"))
@@ -78,6 +96,7 @@ export const getUser = async (req, res, next) => {
 
     res.status(200).json(rest)
   } catch (error) {
+    console.error("Error in getUser:", error)
     next(error)
   }
 }
@@ -85,19 +104,33 @@ export const getUser = async (req, res, next) => {
 // Get all users (admin only)
 export const getAllUsers = async (req, res, next) => {
   try {
-    // Check if user is admin
-    if (req.user && req.user.id) {
-      const currentUser = await User.findById(req.user.id)
-      if (!currentUser || !currentUser.isAdmin) {
-        console.log("Non-admin attempted to access getAllUsers")
-        return next(errorHandler(403, "Admin access required"))
-      }
-    } else {
-      console.log("Unauthenticated access attempt to getAllUsers")
+    console.log("getAllUsers called")
+    console.log("Request user:", req.user)
+
+    // Check if user is authenticated
+    if (!req.user || !req.user.id) {
+      console.log("No authenticated user found")
       return next(errorHandler(401, "Authentication required"))
     }
 
-    const users = await User.find({}, { password: 0 })
+    // Get current user and check admin status
+    const currentUser = await User.findById(req.user.id)
+    console.log("Current user found:", currentUser ? "Yes" : "No", "isAdmin:", currentUser?.isAdmin)
+
+    if (!currentUser) {
+      console.log("Current user not found in database")
+      return next(errorHandler(404, "User not found"))
+    }
+
+    if (!currentUser.isAdmin) {
+      console.log("User is not admin")
+      return next(errorHandler(403, "Admin access required"))
+    }
+
+    // Fetch all users excluding passwords
+    const users = await User.find({}).select("-password").sort({ createdAt: -1 })
+    console.log(`Found ${users.length} users`)
+
     res.status(200).json(users)
   } catch (error) {
     console.error("Error in getAllUsers:", error)
@@ -108,19 +141,31 @@ export const getAllUsers = async (req, res, next) => {
 // Get user count (admin only)
 export const getUserCount = async (req, res, next) => {
   try {
-    // Check if user is admin
-    if (req.user && req.user.id) {
-      const currentUser = await User.findById(req.user.id)
-      if (!currentUser || !currentUser.isAdmin) {
-        console.log("Non-admin attempted to access getUserCount")
-        return next(errorHandler(403, "Admin access required"))
-      }
-    } else {
-      console.log("Unauthenticated access attempt to getUserCount")
+    console.log("getUserCount called")
+
+    // Check if user is authenticated
+    if (!req.user || !req.user.id) {
+      console.log("No authenticated user found")
       return next(errorHandler(401, "Authentication required"))
     }
 
+    // Get current user and check admin status
+    const currentUser = await User.findById(req.user.id)
+    console.log("Current user found:", currentUser ? "Yes" : "No", "isAdmin:", currentUser?.isAdmin)
+
+    if (!currentUser) {
+      console.log("Current user not found in database")
+      return next(errorHandler(404, "User not found"))
+    }
+
+    if (!currentUser.isAdmin) {
+      console.log("User is not admin")
+      return next(errorHandler(403, "Admin access required"))
+    }
+
     const count = await User.countDocuments()
+    console.log(`Total user count: ${count}`)
+
     res.status(200).json({ count })
   } catch (error) {
     console.error("Error in getUserCount:", error)
@@ -131,16 +176,26 @@ export const getUserCount = async (req, res, next) => {
 // Update user role (admin only)
 export const updateUserRole = async (req, res, next) => {
   try {
-    // Check if user is admin
-    if (req.user && req.user.id) {
-      const adminUser = await User.findById(req.user.id)
-      if (!adminUser || !adminUser.isAdmin) {
-        console.log("Non-admin attempted to update user role")
-        return next(errorHandler(403, "Admin access required"))
-      }
-    } else {
-      console.log("Unauthenticated access attempt to update user role")
+    console.log("updateUserRole called")
+
+    // Check if user is authenticated
+    if (!req.user || !req.user.id) {
+      console.log("No authenticated user found")
       return next(errorHandler(401, "Authentication required"))
+    }
+
+    // Get current user and check admin status
+    const adminUser = await User.findById(req.user.id)
+    console.log("Admin user found:", adminUser ? "Yes" : "No", "isAdmin:", adminUser?.isAdmin)
+
+    if (!adminUser) {
+      console.log("Admin user not found in database")
+      return next(errorHandler(404, "User not found"))
+    }
+
+    if (!adminUser.isAdmin) {
+      console.log("User is not admin")
+      return next(errorHandler(403, "Admin access required"))
     }
 
     const { isAdmin } = req.body
@@ -149,14 +204,16 @@ export const updateUserRole = async (req, res, next) => {
       return next(errorHandler(400, "isAdmin must be a boolean value"))
     }
 
-    const updatedUser = await User.findByIdAndUpdate(req.params.id, { $set: { isAdmin } }, { new: true })
+    const updatedUser = await User.findByIdAndUpdate(req.params.id, { $set: { isAdmin } }, { new: true }).select(
+      "-password",
+    )
 
     if (!updatedUser) {
       return next(errorHandler(404, "User not found"))
     }
 
-    const { password, ...rest } = updatedUser._doc
-    res.status(200).json(rest)
+    console.log(`User ${updatedUser.username} role updated to admin: ${isAdmin}`)
+    res.status(200).json(updatedUser)
   } catch (error) {
     console.error("Error updating user role:", error)
     next(error)
@@ -194,6 +251,13 @@ export const promoteToAdmin = async (req, res, next) => {
 export const checkAdmin = async (req, res, next) => {
   try {
     const userId = req.params.id
+
+    // Validate that the ID is a valid ObjectId format
+    if (!userId.match(/^[0-9a-fA-F]{24}$/)) {
+      console.log("Invalid ObjectId format:", userId)
+      return next(errorHandler(400, "Invalid user ID format"))
+    }
+
     const user = await User.findById(userId)
 
     if (!user) {

@@ -1,8 +1,8 @@
 import express from "express"
 import {
+  deleteUser,
   test,
   updateUser,
-  deleteUser,
   getUserListings,
   getUser,
   getAllUsers,
@@ -11,26 +11,30 @@ import {
   promoteToAdmin,
   checkAdmin,
 } from "../controllers/user.controller.js"
-import { verifyToken, optionalAuth } from "../utils/verifyUser.js"
+import { verifyToken } from "../utils/verifyUser.js"
 
 const router = express.Router()
 
 // Test route
 router.get("/test", test)
 
-// Public routes for debugging - making these public to fix admin dashboard
-router.get("/count", optionalAuth, getUserCount)
-router.get("/all", optionalAuth, getAllUsers)
-
-// Emergency admin promotion endpoint
+// Emergency admin promotion endpoint (no auth required)
 router.post("/promote-admin", promoteToAdmin)
 
-// Protected routes
+// User count route - move this BEFORE /:id route
+router.get("/count", verifyToken, getUserCount)
+
+// Admin-specific routes (must come before any /:id routes)
+router.get("/all", verifyToken, getAllUsers)
+
+// User management routes with specific paths
 router.post("/update/:id", verifyToken, updateUser)
 router.delete("/delete/:id", verifyToken, deleteUser)
 router.get("/listings/:id", verifyToken, getUserListings)
-router.get("/:id", verifyToken, getUser)
 router.post("/role/:id", verifyToken, updateUserRole)
-router.get("/check-admin/:id", checkAdmin)
+router.get("/check-admin/:id", verifyToken, checkAdmin)
+
+// Generic /:id route MUST be absolutely last
+router.get("/:id", verifyToken, getUser)
 
 export default router

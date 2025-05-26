@@ -5,6 +5,7 @@ import { Link, useNavigate } from "react-router-dom"
 import { useSelector, useDispatch } from "react-redux"
 import { useEffect, useState, useRef } from "react"
 import { signOutUserStart, signOutUserSuccess, signOutUserFailure, updateAdminStatus } from "../redux/user/userSlice"
+import logo from "../assets/logo.png"
 
 export default function Header() {
   const { currentUser } = useSelector((state) => state.user)
@@ -112,14 +113,33 @@ export default function Header() {
     navigate("/admin")
   }
 
+  const handleListClick = () => {
+    if (currentUser) {
+      navigate("/create-listing")
+    } else {
+      navigate("/sign-in")
+    }
+  }
+
+  const handleAdvertiseClick = () => {
+    if (currentUser) {
+      navigate("/advertise")
+    } else {
+      navigate("/sign-in")
+    }
+  }
+
   return (
-    <header className="bg-slate-200 shadow-md">
+    <header className="bg-slate-200 shadow-md relative z-40">
       <div className="flex justify-between items-center max-w-6xl mx-auto p-3">
         <Link to="/">
-          <h1 className="font-bold text-sm sm:text-xl flex flex-wrap">
-            <span className="text-slate-500">Estate</span>
-            <span className="text-slate-700">App</span>
-          </h1>
+          <div className="flex items-center">
+            <img src={logo || "/placeholder.svg"} alt="Estate App Logo" className="h-8 w-auto mr-2" />
+            <h1 className="font-bold text-sm sm:text-xl flex flex-wrap">
+              <span className="text-slate-700">Exela</span>
+              <span className="text-slate-500">Realtors</span>
+            </h1>
+          </div>
         </Link>
         <form onSubmit={handleSubmit} className="bg-slate-100 p-3 rounded-lg flex items-center">
           <input
@@ -141,6 +161,18 @@ export default function Header() {
             <li className="hidden sm:inline text-slate-700 hover:underline">About</li>
           </Link>
           <li
+            onClick={handleListClick}
+            className="hidden sm:inline text-slate-700 hover:underline cursor-pointer"
+          >
+            List Property
+          </li>
+          <li
+            onClick={handleAdvertiseClick}
+            className="hidden sm:inline text-slate-700 hover:underline cursor-pointer"
+          >
+            Advertise
+          </li>
+          <li
             onClick={handleRentalManagerClick}
             className="hidden sm:inline text-slate-700 hover:underline cursor-pointer"
           >
@@ -157,7 +189,7 @@ export default function Header() {
               />
 
               {showDropdown && (
-                <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-10">
+                <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-50">
                   <Link to="/profile">
                     <div className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Update Profile</div>
                   </Link>
@@ -166,6 +198,9 @@ export default function Header() {
                   </Link>
                   <Link to="/create-listing">
                     <div className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Create Listing</div>
+                  </Link>
+                  <Link to="/advertise">
+                    <div className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Advertise</div>
                   </Link>
                   <Link to="/rental-manager">
                     <div className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Rental Manager</div>

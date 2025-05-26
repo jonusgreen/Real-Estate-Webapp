@@ -3,9 +3,6 @@ import bcryptjs from "bcryptjs"
 import { errorHandler } from "../utils/error.js"
 import jwt from "jsonwebtoken"
 import nodemailer from "nodemailer"
-// import bcrypt from 'bcrypt';
-// dotenv.config();
-
 
 export const signup = async (req, res, next) => {
   const { username, email, password } = req.body //Receives username, email, p/word from req.body.
@@ -28,10 +25,27 @@ export const signin = async (req, res, next) => {
     if (!validPassword) return next(errorHandler(401, "Wrong credentials")) //Error if invalid
 
     //Authenticating the user:
-    const token = jwt.sign({ id: validEmail._id }, process.env.JWT_SECRET)
+    const token = jwt.sign(
+      {
+        id: validEmail._id,
+        isAdmin: validEmail.isAdmin || false,
+      },
+      process.env.JWT_SECRET,
+    )
     const { password: pasiwadi, ...restOfUserInfo } = validEmail._doc //Donna wanna send p/word to user - rest of user info.
-    //After creating the token, we want to save it as a cookie bbelow:
-    res.cookie("access_token", token, { httpOnly: true }).status(200).json(restOfUserInfo)
+
+    console.log("Setting cookie for user:", validEmail._id, "isAdmin:", validEmail.isAdmin)
+
+    //After creating the token, we want to save it as a cookie below:
+    res
+      .cookie("access_token", token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+        maxAge: 24 * 60 * 60 * 1000, // 24 hours
+      })
+      .status(200)
+      .json(restOfUserInfo)
   } catch (error) {
     next(error)
   }
@@ -41,9 +55,26 @@ export const google = async (req, res, next) => {
   try {
     const user = await User.findOne({ email: req.body.email })
     if (user) {
-      const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET)
+      const token = jwt.sign(
+        {
+          id: user._id,
+          isAdmin: user.isAdmin || false,
+        },
+        process.env.JWT_SECRET,
+      )
       const { password: pasiwadi, ...rest } = user._doc
-      res.cookie("access_token", token, { httpOnly: true }).status(200).json(rest)
+
+      console.log("Google auth - Setting cookie for user:", user._id, "isAdmin:", user.isAdmin)
+
+      res
+        .cookie("access_token", token, {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === "production",
+          sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+          maxAge: 24 * 60 * 60 * 1000, // 24 hours
+        })
+        .status(200)
+        .json(rest)
     } else {
       const generatePassword = Math.random().toString(36).slice(-8) + Math.random().toString(36).slice(-8)
       const hashedPassword = bcryptjs.hashSync(generatePassword, 10)
@@ -54,23 +85,56 @@ export const google = async (req, res, next) => {
         avatar: req.body.photo,
       })
       await newUser.save()
-      const token = jwt.sign({ id: newUser._id }, process.env.JWT_SECRET)
+      const token = jwt.sign(
+        {
+          id: newUser._id,
+          isAdmin: newUser.isAdmin || false,
+        },
+        process.env.JWT_SECRET,
+      )
       const { password: pasiwadi, ...rest } = newUser._doc
-      res.cookie("access_token", token, { httpOnly: true }).status(200).json(rest)
+
+      console.log("Google auth - New user, setting cookie for:", newUser._id)
+
+      res
+        .cookie("access_token", token, {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === "production",
+          sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+          maxAge: 24 * 60 * 60 * 1000, // 24 hours
+        })
+        .status(200)
+        .json(rest)
     }
   } catch (error) {
     next(error)
   }
 }
 
-// Add the facebook authentication function after the google function
 export const facebook = async (req, res, next) => {
   try {
     const user = await User.findOne({ email: req.body.email })
     if (user) {
-      const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET)
+      const token = jwt.sign(
+        {
+          id: user._id,
+          isAdmin: user.isAdmin || false,
+        },
+        process.env.JWT_SECRET,
+      )
       const { password: pasiwadi, ...rest } = user._doc
-      res.cookie("access_token", token, { httpOnly: true }).status(200).json(rest)
+
+      console.log("Facebook auth - Setting cookie for user:", user._id, "isAdmin:", user.isAdmin)
+
+      res
+        .cookie("access_token", token, {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === "production",
+          sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+          maxAge: 24 * 60 * 60 * 1000, // 24 hours
+        })
+        .status(200)
+        .json(rest)
     } else {
       const generatePassword = Math.random().toString(36).slice(-8) + Math.random().toString(36).slice(-8)
       const hashedPassword = bcryptjs.hashSync(generatePassword, 10)
@@ -81,24 +145,41 @@ export const facebook = async (req, res, next) => {
         avatar: req.body.photo,
       })
       await newUser.save()
-      const token = jwt.sign({ id: newUser._id }, process.env.JWT_SECRET)
+      const token = jwt.sign(
+        {
+          id: newUser._id,
+          isAdmin: newUser.isAdmin || false,
+        },
+        process.env.JWT_SECRET,
+      )
       const { password: pasiwadi, ...rest } = newUser._doc
-      res.cookie("access_token", token, { httpOnly: true }).status(200).json(rest)
+
+      console.log("Facebook auth - New user, setting cookie for:", newUser._id)
+
+      res
+        .cookie("access_token", token, {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === "production",
+          sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+          maxAge: 24 * 60 * 60 * 1000, // 24 hours
+        })
+        .status(200)
+        .json(rest)
     }
   } catch (error) {
     next(error)
   }
 }
+
 export const signout = (req, res, next) => {
   try {
+    console.log("Signing out user, clearing cookie")
     res.clearCookie("access_token").status(200).json("User has been signed out")
   } catch (error) {
     next(error)
   }
 }
 
-/////////////////////////////////////////////////////////////////////////////////////////////
-//Forgot password added by me:
 export const forgotPassword = (req, res) => {
   const { email } = req.body
 
@@ -145,8 +226,6 @@ export const forgotPassword = (req, res) => {
     })
 }
 
-//Reset password - added by me
-//Reset password - updated
 export const resetPassword = async (req, res) => {
   const { id, token } = req.params
   const { password } = req.body

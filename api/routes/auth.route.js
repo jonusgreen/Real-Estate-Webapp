@@ -1,8 +1,8 @@
 import express from "express"
 import {
-  google,
   signin,
   signup,
+  google,
   signout,
   forgotPassword,
   resetPassword,
@@ -11,12 +11,12 @@ import {
 
 const router = express.Router()
 
-router.post("/signup", signup) //Signup function comes from auth.controller.
+router.post("/signup", signup)
 router.post("/signin", signin)
 router.post("/google", google)
-router.post("/facebook", facebook) // Added Facebook authentication
+router.post("/facebook", facebook)
 router.get("/signout", signout)
-router.post("/forgot-password", forgotPassword) //Added by me
-router.post("/reset-password/:id/:token", resetPassword) //Added by me
+router.post("/forgot-password", forgotPassword)
+router.post("/reset-password/:id/:token", resetPassword)
 
 export default router

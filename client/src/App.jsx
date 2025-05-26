@@ -17,6 +17,10 @@ import RentalManagement from "./pages/RentalManagement"
 import RentalManagerLogin from "./pages/RentalManagerLogin"
 import PostListingPreview from "./pages/PostListingPreview"
 import ShowListings from "./pages/ShowListings"
+import Advertise from "./pages/Advertise"
+import PromoteListing from "./pages/PromoteListing"
+import AdvertisePayment from "./pages/AdvertisePayment"
+import AdvertiseSuccess from "./pages/AdvertiseSuccess"
 
 export default function App() {
   return (
@@ -36,6 +40,10 @@ export default function App() {
         <Route path="/rental-manager-login" element={<RentalManagerLogin />} />
         <Route path="/post-listing-preview" element={<PostListingPreview />} />
         <Route path="/show-listings" element={<ShowListings />} />
+        <Route path="/advertise" element={<Advertise />} />
+        <Route path="/advertise/promote/:id" element={<PromoteListing />} />
+        <Route path="/advertise/payment/:id" element={<AdvertisePayment />} />
+        <Route path="/advertise/success" element={<AdvertiseSuccess />} />
 
         <Route element={<PrivateRoute />}>
           <Route path="/profile" element={<Profile />} />

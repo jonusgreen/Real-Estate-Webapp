@@ -22,14 +22,15 @@ export const createListing = async (req, res, next) => {
       ...req.body,
       approved: isAdmin ? true : false, // Auto-approve if admin is creating the listing
       userRef: req.user.id, // Ensure userRef is set to the current user
+      approvedAt: isAdmin ? new Date() : null,
+      approvedBy: isAdmin ? req.user.id : null,
     })
 
-    // Return success response
+    console.log(`Listing created: ${listing.name}, Approved: ${listing.approved}`)
     return res.status(201).json(listing)
   } catch (error) {
     console.error("Error creating listing:", error)
     if (error.name === "ValidationError") {
-      // Handle mongoose validation errors
       const messages = Object.values(error.errors).map((val) => val.message)
       return res.status(400).json({ success: false, message: messages.join(", ") })
     }
@@ -50,6 +51,7 @@ export const deleteListing = async (req, res, next) => {
     }
 
     await Listing.findByIdAndDelete(req.params.id)
+    console.log(`Listing deleted: ${req.params.id}`)
     res.status(200).json({ success: true, message: "Listing has been deleted" })
   } catch (error) {
     console.error("Error deleting listing:", error)
@@ -75,6 +77,7 @@ export const updateListing = async (req, res, next) => {
     }
 
     const updatedListing = await Listing.findByIdAndUpdate(req.params.id, req.body, { new: true })
+    console.log(`Listing updated: ${updatedListing.name}`)
     res.status(200).json(updatedListing)
   } catch (error) {
     console.error("Error updating listing:", error)
@@ -107,14 +110,13 @@ export const getListings = async (req, res, next) => {
     // Build query object
     const query = {}
 
-    // FIXED: Properly handle approval status in queries
+    // Handle approval status based on user type and request
     if (req.user && req.user.isAdmin) {
       // Admin users can see all listings by default
       console.log("Admin user - respecting query parameters")
 
       // If admin specifically requests approved=true or approved=false, respect that
       if (req.query.approved !== undefined) {
-        // Convert string "true"/"false" to boolean
         query.approved = req.query.approved === "true"
         console.log(`Admin filtering by approval status: ${query.approved}`)
       }
@@ -128,27 +130,23 @@ export const getListings = async (req, res, next) => {
       console.log("Public query - showing only approved listings")
     }
 
-    // Handle offer filter
+    // Handle other filters
     if (req.query.offer === "true") {
       query.offer = true
     }
 
-    // Handle furnished filter
     if (req.query.furnished === "true") {
       query.furnished = true
     }
 
-    // Handle parking filter
     if (req.query.parking === "true") {
       query.parking = true
     }
 
-    // Handle type filter
     if (req.query.type && req.query.type !== "all") {
       query.type = req.query.type
     }
 
-    // Handle search term
     if (req.query.searchTerm) {
       query.name = { $regex: req.query.searchTerm, $options: "i" }
     }
@@ -162,18 +160,13 @@ export const getListings = async (req, res, next) => {
       const sortOrder = req.query.order === "asc" ? 1 : -1
       sort[sortField] = sortOrder
     } else {
-      // Default sort by createdAt descending
       sort.createdAt = -1
     }
 
     const listings = await Listing.find(query).sort(sort).limit(limit).skip(startIndex)
-
-    // Get total count for pagination
     const total = await Listing.countDocuments(query)
 
     console.log(`Found ${listings.length} listings out of ${total} total`)
-
-    // IMPORTANT: Always return an array for consistency
     return res.status(200).json(listings)
   } catch (error) {
     console.error(`Error fetching listings: ${error.message}`)
@@ -181,10 +174,9 @@ export const getListings = async (req, res, next) => {
   }
 }
 
-// New controller function to approve a listing (admin only)
+// Approve a listing (admin only)
 export const approveListing = async (req, res, next) => {
   try {
-    // Check if user is admin
     if (!req.user || !req.user.isAdmin) {
       return next(errorHandler(403, "Only administrators can approve listings"))
     }
@@ -194,8 +186,18 @@ export const approveListing = async (req, res, next) => {
       return next(errorHandler(404, "Listing not found"))
     }
 
-    const updatedListing = await Listing.findByIdAndUpdate(req.params.id, { approved: true }, { new: true })
+    const updatedListing = await Listing.findByIdAndUpdate(
+      req.params.id,
+      {
+        approved: true,
+        approvedAt: new Date(),
+        approvedBy: req.user.id,
+        rejectionReason: null, // Clear any previous rejection reason
+      },
+      { new: true },
+    )
 
+    console.log(`Listing approved: ${updatedListing.name} by admin ${req.user.id}`)
     res.status(200).json(updatedListing)
   } catch (error) {
     console.error("Error approving listing:", error)
@@ -203,10 +205,9 @@ export const approveListing = async (req, res, next) => {
   }
 }
 
-// Function to reject a listing (admin only)
+// Reject a listing (admin only)
 export const rejectListing = async (req, res, next) => {
   try {
-    // Check if user is admin
     if (!req.user || !req.user.isAdmin) {
       return next(errorHandler(403, "Only administrators can reject listings"))
     }
@@ -216,7 +217,6 @@ export const rejectListing = async (req, res, next) => {
       return next(errorHandler(404, "Listing not found"))
     }
 
-    // Get rejection reason from request body
     const { reason } = req.body
 
     const updatedListing = await Listing.findByIdAndUpdate(
@@ -224,10 +224,13 @@ export const rejectListing = async (req, res, next) => {
       {
         approved: false,
         rejectionReason: reason || "Rejected by administrator",
+        approvedAt: null,
+        approvedBy: null,
       },
       { new: true },
     )
 
+    console.log(`Listing rejected: ${updatedListing.name} by admin ${req.user.id}`)
     res.status(200).json(updatedListing)
   } catch (error) {
     console.error("Error rejecting listing:", error)
@@ -235,17 +238,24 @@ export const rejectListing = async (req, res, next) => {
   }
 }
 
-// New controller function to bulk approve all listings (admin only)
+// Bulk approve all listings (admin only)
 export const bulkApproveListings = async (req, res, next) => {
   try {
-    // Check if user is admin
     if (!req.user || !req.user.isAdmin) {
       return next(errorHandler(403, "Only administrators can bulk approve listings"))
     }
 
-    // Update all listings to be approved
-    const result = await Listing.updateMany({ approved: { $ne: true } }, { approved: true })
+    const result = await Listing.updateMany(
+      { approved: { $ne: true } },
+      {
+        approved: true,
+        approvedAt: new Date(),
+        approvedBy: req.user.id,
+        rejectionReason: null,
+      },
+    )
 
+    console.log(`Bulk approved ${result.modifiedCount} listings by admin ${req.user.id}`)
     res.status(200).json({
       message: `Successfully approved ${result.modifiedCount} listings`,
       modifiedCount: result.modifiedCount,
@@ -256,28 +266,16 @@ export const bulkApproveListings = async (req, res, next) => {
   }
 }
 
-// New controller functions for admin dashboard
-
 export const getListingStats = async (req, res, next) => {
   try {
     console.log("Getting listing stats")
 
-    // Get total count
     const total = await Listing.countDocuments()
-    console.log(`Total listings: ${total}`)
-
-    // Get active listings (approved listings)
     const active = await Listing.countDocuments({ approved: true })
-
-    // Get count by type
     const forRent = await Listing.countDocuments({ type: "rent" })
     const forSale = await Listing.countDocuments({ type: "sale" })
-    console.log(`For rent: ${forRent}, For sale: ${forSale}`)
-
-    // Get count of pending approval
     const pendingApproval = await Listing.countDocuments({ approved: false })
 
-    // Calculate total revenue (sum of all regular prices for approved listings)
     const revenueData = await Listing.aggregate([
       { $match: { approved: true } },
       {
@@ -289,7 +287,8 @@ export const getListingStats = async (req, res, next) => {
     ])
 
     const revenue = revenueData.length > 0 ? revenueData[0].total : 0
-    console.log(`Total revenue: ${revenue}`)
+
+    console.log(`Stats - Total: ${total}, Active: ${active}, Pending: ${pendingApproval}`)
 
     res.status(200).json({
       total,
@@ -309,11 +308,9 @@ export const getRecentListings = async (req, res, next) => {
   try {
     console.log("Getting recent listings")
 
-    // For admin, show all recent listings
-    // For public, only show approved listings
     const query = req.user && req.user.isAdmin ? {} : { approved: true }
-
     const recentListings = await Listing.find(query).sort({ createdAt: -1 }).limit(5)
+
     console.log(`Found ${recentListings.length} recent listings`)
     res.status(200).json(recentListings)
   } catch (error) {

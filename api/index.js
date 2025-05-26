@@ -7,6 +7,7 @@ import listingRouter from "./routes/listing.route.js"
 import cookieParser from "cookie-parser"
 import path from "path"
 import { fileURLToPath } from "url"
+
 dotenv.config()
 
 // Get __dirname equivalent in ES module
@@ -37,7 +38,19 @@ app.use(cookieParser())
 
 // Add request logging middleware
 app.use((req, res, next) => {
-  console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`)
+  const timestamp = new Date().toISOString()
+  console.log(`${timestamp} - ${req.method} ${req.path}`)
+
+  // Log cookies for debugging
+  if (req.cookies && Object.keys(req.cookies).length > 0) {
+    console.log("Cookies received:", Object.keys(req.cookies))
+    if (req.cookies.access_token) {
+      console.log("Access token present:", req.cookies.access_token ? "Yes" : "No")
+    }
+  } else {
+    console.log("No cookies received")
+  }
+
   next()
 })
 
@@ -45,8 +58,10 @@ app.use((req, res, next) => {
 app.get("/api/status", (req, res) => {
   res.json({
     status: "online",
-    database: mongoose.connection.readyState === 1 ? "connected to MongoDB" : "disconnected",
+    database: mongoose.connection.readyState === 1 ? "connected" : "disconnected",
     timestamp: new Date().toISOString(),
+    cookies: req.cookies ? Object.keys(req.cookies) : [],
+    hasAccessToken: !!req.cookies?.access_token,
   })
 })
 

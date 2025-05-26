@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
 import { useSelector } from "react-redux"
-import { Home, DollarSign, AlertTriangle } from "lucide-react"
+import { Home, DollarSign, AlertTriangle, Users } from "lucide-react"
 
 export default function AdminDashboard() {
   const [stats, setStats] = useState({
@@ -13,6 +13,9 @@ export default function AdminDashboard() {
     forSale: 0,
     pendingApproval: 0,
     revenue: 0,
+    totalUsers: 0,
+    adminUsers: 0,
+    regularUsers: 0,
   })
   const [recentListings, setRecentListings] = useState([])
   const [loading, setLoading] = useState(true)
@@ -32,17 +35,52 @@ export default function AdminDashboard() {
         setLoading(true)
         setError(null)
 
-        // Fetch stats
+        // Fetch listing stats
         const statsRes = await fetch("/api/listing/stats", {
           credentials: "include",
         })
 
         if (!statsRes.ok) {
-          throw new Error(`Failed to fetch stats: ${statsRes.status} ${statsRes.statusText}`)
+          throw new Error(`Failed to fetch listing stats: ${statsRes.status} ${statsRes.statusText}`)
         }
 
         const statsData = await statsRes.json()
-        setStats(statsData)
+
+        // Fetch user count
+        const userCountRes = await fetch("/api/user/count", {
+          credentials: "include",
+        })
+
+        let userStats = { totalUsers: 0, adminUsers: 0, regularUsers: 0 }
+        if (userCountRes.ok) {
+          const userCountData = await userCountRes.json()
+
+          // Fetch all users to get admin/regular breakdown
+          const usersRes = await fetch("/api/user/all", {
+            credentials: "include",
+          })
+
+          if (usersRes.ok) {
+            const usersData = await usersRes.json()
+            console.log("Users data:", usersData) // Add debug logging
+            userStats = {
+              totalUsers: usersData.length,
+              adminUsers: usersData.filter((user) => user.isAdmin).length,
+              regularUsers: usersData.filter((user) => !user.isAdmin).length,
+            }
+            console.log("User stats:", userStats) // Add debug logging
+          } else {
+            console.error("Failed to fetch users:", usersRes.status, usersRes.statusText)
+            userStats.totalUsers = userCountData.count || 0
+          }
+        } else {
+          console.error("Failed to fetch user count:", userCountRes.status, userCountRes.statusText)
+        }
+
+        setStats({
+          ...statsData,
+          ...userStats,
+        })
 
         // Fetch recent listings
         const listingsRes = await fetch("/api/listing/recent", {
@@ -106,6 +144,12 @@ export default function AdminDashboard() {
     return (
       <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
         <p>{error}</p>
+        <button
+          onClick={() => window.location.reload()}
+          className="mt-2 bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700"
+        >
+          Retry
+        </button>
       </div>
     )
   }
@@ -115,7 +159,7 @@ export default function AdminDashboard() {
       <h1 className="text-2xl font-bold mb-6">Dashboard</h1>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
         <div className="bg-white p-6 rounded-lg shadow-md">
           <div className="flex items-center">
             <div className="p-3 rounded-full bg-blue-100 text-blue-600 mr-4">
@@ -150,6 +194,28 @@ export default function AdminDashboard() {
           </div>
           <div className="mt-4">
             <p className="text-sm text-gray-500">Based on listing prices</p>
+          </div>
+        </div>
+
+        <div className="bg-white p-6 rounded-lg shadow-md">
+          <div className="flex items-center">
+            <div className="p-3 rounded-full bg-purple-100 text-purple-600 mr-4">
+              <Users className="h-6 w-6" />
+            </div>
+            <div>
+              <p className="text-sm text-gray-500">Total Users</p>
+              <p className="text-2xl font-semibold">{stats.totalUsers}</p>
+            </div>
+          </div>
+          <div className="mt-4 flex justify-between text-sm">
+            <div>
+              <p className="text-gray-500">Admins</p>
+              <p className="font-medium">{stats.adminUsers}</p>
+            </div>
+            <div>
+              <p className="text-gray-500">Regular</p>
+              <p className="font-medium">{stats.regularUsers}</p>
+            </div>
           </div>
         </div>
 
@@ -207,6 +273,48 @@ export default function AdminDashboard() {
             )}
           </div>
         </div>
+      </div>
+
+      {/* Quick Actions */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <button
+          onClick={() => navigate("/admin?tab=users")}
+          className="bg-blue-50 hover:bg-blue-100 p-6 rounded-lg border border-blue-200 text-left transition"
+        >
+          <div className="flex items-center">
+            <Users className="h-8 w-8 text-blue-600 mr-3" />
+            <div>
+              <h3 className="font-semibold text-blue-900">Manage Users</h3>
+              <p className="text-sm text-blue-700">View and edit user accounts</p>
+            </div>
+          </div>
+        </button>
+
+        <button
+          onClick={() => navigate("/admin?tab=listings")}
+          className="bg-green-50 hover:bg-green-100 p-6 rounded-lg border border-green-200 text-left transition"
+        >
+          <div className="flex items-center">
+            <Home className="h-8 w-8 text-green-600 mr-3" />
+            <div>
+              <h3 className="font-semibold text-green-900">Manage Listings</h3>
+              <p className="text-sm text-green-700">Review and approve properties</p>
+            </div>
+          </div>
+        </button>
+
+        <button
+          onClick={() => navigate("/admin?tab=approvals")}
+          className="bg-yellow-50 hover:bg-yellow-100 p-6 rounded-lg border border-yellow-200 text-left transition"
+        >
+          <div className="flex items-center">
+            <AlertTriangle className="h-8 w-8 text-yellow-600 mr-3" />
+            <div>
+              <h3 className="font-semibold text-yellow-900">Pending Approvals</h3>
+              <p className="text-sm text-yellow-700">Review listings awaiting approval</p>
+            </div>
+          </div>
+        </button>
       </div>
 
       {/* Migration Section */}
@@ -294,6 +402,7 @@ export default function AdminDashboard() {
                             src={
                               listing.imageUrls?.[0] ||
                               "https://cdn.pixabay.com/photo/2016/11/18/17/46/house-1836070_1280.jpg" ||
+                              "/placeholder.svg" ||
                               "/placeholder.svg" ||
                               "/placeholder.svg"
                             }
