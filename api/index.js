@@ -9,32 +9,47 @@ import path from "path"
 import cors from "cors"
 import { fileURLToPath } from "url"
 
-const app = express()
-
-const allowedOrigins = [
-  'http://localhost:5173', // local dev
-  'https://exela-realtors-islo.onrender.com' // production frontend
-];
-
-app.use(cors({
-  origin: function(origin, callback) {
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error('Not allowed by CORS'));
-    }
-  },
-  credentials: true
-}));
-
-
-
-
 dotenv.config()
 
 // Get __dirname equivalent in ES module
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
+
+const app = express()
+
+// CORS Configuration - Single, clean setup
+const allowedOrigins = [
+  "http://localhost:5173", // local dev
+  "http://localhost:3000", // local backend
+  "https://exela-realtors-islo.onrender.com", // production frontend
+  process.env.FRONTEND_URL, // environment variable fallback
+]
+
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      // Allow requests with no origin (like mobile apps or curl requests)
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true)
+      } else {
+        callback(new Error("Not allowed by CORS"))
+      }
+    },
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization", "Cookie"],
+  }),
+)
+
+// Security headers for production
+app.use((req, res, next) => {
+  res.header("Access-Control-Allow-Credentials", "true")
+  if (process.env.NODE_ENV === "production") {
+    res.header("Cross-Origin-Embedder-Policy", "cross-origin")
+    res.header("Cross-Origin-Opener-Policy", "same-origin")
+  }
+  next()
+})
 
 // Improved MongoDB connection with better error handling
 const connectDB = async () => {
@@ -51,6 +66,7 @@ const connectDB = async () => {
 
 // Connect to MongoDB
 connectDB()
+
 // Middleware
 app.use(express.json())
 app.use(cookieParser())
@@ -89,9 +105,25 @@ app.use("/api/user", userRouter)
 app.use("/api/auth", authRouter)
 app.use("/api/listing", listingRouter)
 
-// Serve static assets if in production. Must come after routes.
+// Serve static assets if in production
 if (process.env.NODE_ENV === "production") {
-  app.use(express.static(path.join(__dirname, "../client/dist")))
+  // Serve static files with proper headers
+  app.use(
+    express.static(path.join(__dirname, "../client/dist"), {
+      maxAge: "1y",
+      etag: false,
+      setHeaders: (res, filePath) => {
+        if (filePath.endsWith(".js")) {
+          res.setHeader("Content-Type", "application/javascript")
+        }
+        if (filePath.endsWith(".css")) {
+          res.setHeader("Content-Type", "text/css")
+        }
+      },
+    }),
+  )
+
+  // Handle client-side routing - catch all handler
   app.get("*", (req, res) => {
     res.sendFile(path.join(__dirname, "../client/dist", "index.html"))
   })
