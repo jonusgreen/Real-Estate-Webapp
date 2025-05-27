@@ -27,7 +27,7 @@ export default defineConfig({
   plugins: [react()],
 
   build: {
-    sourcemap: true, // ✅ Enables proper source map resolution
+    sourcemap: false, // ✅ Enables proper source map resolution
     minify: "terser",
     terserOptions: {
       compress: {
