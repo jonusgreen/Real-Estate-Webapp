@@ -8,6 +8,24 @@ import cookieParser from "cookie-parser"
 import path from "path"
 import { fileURLToPath } from "url"
 
+const cors = require('cors');
+
+
+const allowedOrigins = ['https://exela-realtors-islo.onrender.com'];
+
+app.use(cors({
+  origin: function(origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true // if you're sending cookies
+}));
+
+
+
 dotenv.config()
 
 // Get __dirname equivalent in ES module
