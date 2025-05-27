@@ -6,10 +6,10 @@ import authRouter from "./routes/auth.route.js"
 import listingRouter from "./routes/listing.route.js"
 import cookieParser from "cookie-parser"
 import path from "path"
+import cors from "cors"
 import { fileURLToPath } from "url"
 
-const cors = require('cors');
-
+const app = express()
 
 const allowedOrigins = ['https://exela-realtors-islo.onrender.com'];
 
@@ -21,8 +21,9 @@ app.use(cors({
       callback(new Error('Not allowed by CORS'));
     }
   },
-  credentials: true // if you're sending cookies
+  credentials: true
 }));
+
 
 
 
@@ -47,9 +48,6 @@ const connectDB = async () => {
 
 // Connect to MongoDB
 connectDB()
-
-const app = express()
-
 // Middleware
 app.use(express.json())
 app.use(cookieParser())
