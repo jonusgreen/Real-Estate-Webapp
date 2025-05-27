@@ -1,11 +1,47 @@
-import { apiCache } from "./apiCache.js"
+// Simple in-memory cache
+const cache = new Map()
+const timers = new Map()
+
+const apiCache = {
+  set(key, value, ttl = 5 * 60 * 1000) {
+    // Clear existing timer
+    if (timers.has(key)) {
+      clearTimeout(timers.get(key))
+    }
+
+    // Set value
+    cache.set(key, value)
+
+    // Set expiration
+    const timer = setTimeout(() => {
+      cache.delete(key)
+      timers.delete(key)
+    }, ttl)
+
+    timers.set(key, timer)
+  },
+
+  get(key) {
+    return cache.get(key)
+  },
+
+  has(key) {
+    return cache.has(key)
+  },
+
+  clear() {
+    timers.forEach((timer) => clearTimeout(timer))
+    timers.clear()
+    cache.clear()
+  },
+}
 
 // Optimized fetch with caching and timeout
 export const optimizedFetch = async (url, options = {}) => {
-  const { cache = true, timeout = 10000, ...fetchOptions } = options
+  const { cache: useCache = true, timeout = 10000, ...fetchOptions } = options
 
   // Check cache first for GET requests
-  if (cache && (!fetchOptions.method || fetchOptions.method === "GET") && apiCache.has(url)) {
+  if (useCache && (!fetchOptions.method || fetchOptions.method === "GET") && apiCache.has(url)) {
     return apiCache.get(url)
   }
 
@@ -28,7 +64,7 @@ export const optimizedFetch = async (url, options = {}) => {
     const data = await response.json()
 
     // Cache successful GET responses only
-    if (cache && response.status === 200 && (!fetchOptions.method || fetchOptions.method === "GET")) {
+    if (useCache && response.status === 200 && (!fetchOptions.method || fetchOptions.method === "GET")) {
       apiCache.set(url, data)
     }
 
@@ -42,27 +78,13 @@ export const optimizedFetch = async (url, options = {}) => {
   }
 }
 
-// Batch fetch utility for multiple requests
+// Batch fetch utility
 export const batchFetch = async (requests) => {
-  try {
-    const promises = requests.map(({ url, options }) => optimizedFetch(url, options).catch((error) => ({ error, url })))
-
-    return await Promise.all(promises)
-  } catch (error) {
-    console.error("Batch fetch error:", error)
-    throw error
-  }
+  const promises = requests.map(({ url, options }) => optimizedFetch(url, options).catch((error) => ({ error, url })))
+  return Promise.all(promises)
 }
 
-// Preload utility for critical resources
-export const preloadResource = (url, options = {}) => {
-  // Don't preload if already cached
-  if (apiCache.has(url)) {
-    return Promise.resolve(apiCache.get(url))
-  }
-
-  return optimizedFetch(url, { ...options, cache: true }).catch((error) => {
-    console.warn("Preload failed for:", url, error)
-    return null
-  })
+// Clear cache utility
+export const clearCache = () => {
+  apiCache.clear()
 }
