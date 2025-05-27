@@ -1,31 +1,40 @@
-import { defineConfig } from "vite"
-import react from "@vitejs/plugin-react"
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
 
 export default defineConfig({
   server: {
     proxy: {
       "/api": {
         target: "http://localhost:3000",
-        secure: false,
         changeOrigin: true,
+        secure: false,
         ws: true,
-        configure: (proxy, _options) => {
-          proxy.on("error", (err, _req, _res) => {
-            console.log("proxy error", err)
-          })
-          proxy.on("proxyReq", (proxyReq, req, _res) => {
-            console.log("Sending Request to the Target:", req.method, req.url)
-          })
-          proxy.on("proxyRes", (proxyRes, req, _res) => {
-            console.log("Received Response from the Target:", proxyRes.statusCode, req.url)
-          })
+        configure: (proxy) => {
+          proxy.on("error", (err, req, res) => {
+            console.error("Proxy Error:", err.message);
+          });
+          proxy.on("proxyReq", (proxyReq, req) => {
+            console.log("→ Proxying:", req.method, req.url);
+          });
+          proxy.on("proxyRes", (proxyRes, req) => {
+            console.log("← Response from Target:", proxyRes.statusCode, req.url);
+          });
         },
       },
     },
   },
+
   plugins: [react()],
+
   build: {
-    // Optimize build for better performance
+    sourcemap: true, // ✅ Enables proper source map resolution
+    minify: "terser",
+    terserOptions: {
+      compress: {
+        drop_console: true,
+        drop_debugger: true,
+      },
+    },
     rollupOptions: {
       output: {
         manualChunks: {
@@ -37,17 +46,15 @@ export default defineConfig({
         },
       },
     },
-    // Enable compression
-    minify: "terser",
-    terserOptions: {
-      compress: {
-        drop_console: true,
-        drop_debugger: true,
-      },
-    },
   },
-  // Optimize dependencies
+
   optimizeDeps: {
-    include: ["react", "react-dom", "react-router-dom", "@reduxjs/toolkit", "react-redux"],
+    include: [
+      "react",
+      "react-dom",
+      "react-router-dom",
+      "@reduxjs/toolkit",
+      "react-redux",
+    ],
   },
-})
+});
