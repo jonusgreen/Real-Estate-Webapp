@@ -1,40 +1,33 @@
-import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react";
+import { defineConfig } from "vite"
+import react from "@vitejs/plugin-react"
 
 export default defineConfig({
   server: {
     proxy: {
       "/api": {
-        target: "https://real-estate-webapp-client.onrender.com",
-        changeOrigin: true,
+        target: "http://localhost:3000",
         secure: false,
+        changeOrigin: true,
         ws: true,
-        configure: (proxy) => {
-          proxy.on("error", (err, req, res) => {
-            console.error("Proxy Error:", err.message);
-          });
-          proxy.on("proxyReq", (proxyReq, req) => {
-            console.log("→ Proxying:", req.method, req.url);
-          });
-          proxy.on("proxyRes", (proxyRes, req) => {
-            console.log("← Response from Target:", proxyRes.statusCode, req.url);
-          });
+        configure: (proxy, _options) => {
+          proxy.on("error", (err, _req, _res) => {
+            console.log("proxy error", err)
+          })
+          proxy.on("proxyReq", (proxyReq, req, _res) => {
+            console.log("Sending Request to the Target:", req.method, req.url)
+          })
+          proxy.on("proxyRes", (proxyRes, req, _res) => {
+            console.log("Received Response from the Target:", proxyRes.statusCode, req.url)
+          })
         },
       },
     },
   },
-
   plugins: [react()],
-
   build: {
-    sourcemap: false, // ✅ Enables proper source map resolution
-    minify: "terser",
-    terserOptions: {
-      compress: {
-        drop_console: true,
-        drop_debugger: true,
-      },
-    },
+    // Disable sourcemaps in production to fix the error
+    sourcemap: false,
+    // Optimize build for better performance
     rollupOptions: {
       output: {
         manualChunks: {
@@ -42,19 +35,32 @@ export default defineConfig({
           router: ["react-router-dom"],
           redux: ["@reduxjs/toolkit", "react-redux", "redux-persist"],
           swiper: ["swiper"],
-          icons: ["react-icons"],
+          firebase: ["firebase"],
         },
       },
     },
+    // Enable compression and optimization
+    minify: "terser",
+    terserOptions: {
+      compress: {
+        drop_console: true,
+        drop_debugger: true,
+      },
+    },
+    // Increase chunk size warning limit
+    chunkSizeWarningLimit: 1000,
+    // Optimize assets
+    assetsDir: "assets",
+    // Better error handling
+    reportCompressedSize: false,
   },
-
+  // Optimize dependencies
   optimizeDeps: {
-    include: [
-      "react",
-      "react-dom",
-      "react-router-dom",
-      "@reduxjs/toolkit",
-      "react-redux",
-    ],
+    include: ["react", "react-dom", "react-router-dom", "@reduxjs/toolkit", "react-redux"],
+    exclude: ["@vitejs/plugin-react"],
   },
-});
+  // Better error handling
+  esbuild: {
+    logOverride: { "this-is-undefined-in-esm": "silent" },
+  },
+})
