@@ -17,8 +17,7 @@
 
 // The above was the original code but "require" was no reconized in ES6 so I had to change it to "import" and it worked. I replaced the above code with the one below.
 
-import lineClamp from '@tailwindcss/line-clamp';
-
+// import lineClamp from '@tailwindcss/line-clamp';
 export default {
   content: [
     "./index.html",
@@ -28,7 +27,7 @@ export default {
     extend: {},
   },
   plugins: [
-    lineClamp,
-    // ...
+    // Remove lineClamp from here
+    // Other plugins can stay if you have any
   ],
 };
