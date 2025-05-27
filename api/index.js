@@ -11,7 +11,10 @@ import { fileURLToPath } from "url"
 
 const app = express()
 
-const allowedOrigins = ['https://exela-realtors-islo.onrender.com'];
+const allowedOrigins = [
+  'http://localhost:5173', // local dev
+  'https://exela-realtors-islo.onrender.com' // production frontend
+];
 
 app.use(cors({
   origin: function(origin, callback) {
