@@ -1,13 +1,11 @@
 import { defineConfig } from "vite"
 import react from "@vitejs/plugin-react"
+
 export default defineConfig({
-  build: {
-    sourcemap: false,
-  },
   server: {
     proxy: {
       "/api": {
-        target: "https://real-estate-webapp-client.onrender.com",
+        target: "http://localhost:3000",
         secure: false,
         changeOrigin: true,
         ws: true,
@@ -26,4 +24,30 @@ export default defineConfig({
     },
   },
   plugins: [react()],
+  build: {
+    // Optimize build for better performance
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          vendor: ["react", "react-dom"],
+          router: ["react-router-dom"],
+          redux: ["@reduxjs/toolkit", "react-redux", "redux-persist"],
+          swiper: ["swiper"],
+          icons: ["react-icons"],
+        },
+      },
+    },
+    // Enable compression
+    minify: "terser",
+    terserOptions: {
+      compress: {
+        drop_console: true,
+        drop_debugger: true,
+      },
+    },
+  },
+  // Optimize dependencies
+  optimizeDeps: {
+    include: ["react", "react-dom", "react-router-dom", "@reduxjs/toolkit", "react-redux"],
+  },
 })

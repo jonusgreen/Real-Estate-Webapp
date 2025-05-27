@@ -1,16 +1,19 @@
-import mongoose from "mongoose"
+import mongoose from "mongoose";
 
 const userSchema = new mongoose.Schema(
   {
     username: {
       type: String,
       required: true,
-      unique: true,
+      unique: true, // unique index created automatically
     },
     email: {
       type: String,
       required: true,
       unique: true,
+      lowercase: true,
+      trim: true,
+      // You could add regex validation here if needed
     },
     password: {
       type: String,
@@ -24,17 +27,14 @@ const userSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
-    resetPasswordToken: String, // Field to store password reset token
-    resetPasswordExpires: Date, // Field to store password reset token expiration date
+    resetPasswordToken: String,
+    resetPasswordExpires: Date,
   },
-  { timestamps: true },
-)
+  { timestamps: true }
+);
 
-// Add index for better query performance
-userSchema.index({ username: 1 })
-userSchema.index({ email: 1 })
+// No need to add explicit indexes for username and email because of unique:true
 
-// Check if model already exists to prevent overwriting
-const User = mongoose.models.User || mongoose.model("User", userSchema)
+const User = mongoose.models.User || mongoose.model("User", userSchema);
 
-export default User
+export default User;
