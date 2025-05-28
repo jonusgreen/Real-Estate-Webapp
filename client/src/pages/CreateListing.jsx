@@ -1,17 +1,17 @@
-import { useState } from "react";
-import {
-  getDownloadURL,
-  getStorage,
-  ref,
-  uploadBytesResumable,
-} from "firebase/storage";
-import { app } from "../firebase.js";
-import { useSelector } from "react-redux";
-import { useNavigate } from "react-router-dom";
+"use client"
+
+import { useState, useEffect } from "react"
+import { getDownloadURL, getStorage, ref, uploadBytesResumable } from "firebase/storage"
+import { app } from "../firebase.js"
+import { useSelector } from "react-redux"
+import { useNavigate } from "react-router-dom"
 
 const CreateListing = () => {
-  const { currentUser } = useSelector((state) => state.user);
-  const [files, setFiles] = useState([]);
+  const { currentUser } = useSelector((state) => state.user)
+  const [files, setFiles] = useState([])
+  const [userListings, setUserListings] = useState([])
+  const [showListingsError, setShowListingsError] = useState(false)
+  const [loadingListings, setLoadingListings] = useState(false)
   const [formData, setFormData] = useState({
     imageUrls: [],
     name: "",
@@ -25,152 +25,349 @@ const CreateListing = () => {
     offer: false,
     parking: false,
     furnished: false,
-  });
-  const [imageUploadError, setImageUploadError] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [error, setError] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const navigate = useNavigate();
+    currency: "UGX", // Default to UGX
+  })
+  const [imageUploadError, setImageUploadError] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const [error, setError] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const navigate = useNavigate()
 
-  console.log(formData);
+  console.log(formData)
+
+  // Enhanced function to handle showing user listings with better auth
+  const handleShowListings = async () => {
+    try {
+      console.log("=== Fetching User Listings ===")
+      console.log("Current user:", currentUser)
+      console.log("User ID:", currentUser?._id)
+
+      if (!currentUser || !currentUser._id) {
+        setShowListingsError("Please log in to view your listings")
+        return
+      }
+
+      setShowListingsError(false)
+      setLoadingListings(true)
+
+      // Enhanced fetch with better error handling
+      const res = await fetch(`/api/user/listings/${currentUser._id}`, {
+        method: "GET",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          // Add Authorization header as backup
+          ...(document.cookie.includes("access_token") && {
+            Authorization: `Bearer ${
+              document.cookie
+                .split("; ")
+                .find((row) => row.startsWith("access_token="))
+                ?.split("=")[1]
+            }`,
+          }),
+        },
+      })
+
+      console.log("Response status:", res.status)
+      console.log("Response headers:", res.headers)
+
+      if (res.status === 401) {
+        console.log("❌ 401 Unauthorized - Token may be expired")
+        setShowListingsError("Your session has expired. Please log in again.")
+        return
+      }
+
+      if (res.status === 403) {
+        console.log("❌ 403 Forbidden - Access denied")
+        setShowListingsError("Access denied. You can only view your own listings.")
+        return
+      }
+
+      if (!res.ok) {
+        const errorText = await res.text()
+        console.log("❌ Request failed:", res.status, errorText)
+        throw new Error(`HTTP ${res.status}: ${errorText}`)
+      }
+
+      const data = await res.json()
+      console.log("✅ Listings fetched successfully:", data)
+
+      if (data.length > 0) {
+        setUserListings(data)
+      } else {
+        setUserListings([])
+        console.log("No listings found for user")
+      }
+    } catch (error) {
+      console.error("❌ Error fetching listings:", error)
+      setShowListingsError(`Failed to load listings: ${error.message}`)
+    } finally {
+      setLoadingListings(false)
+    }
+  }
+
+  // Enhanced function to delete listings with better auth
+  const handleListingDelete = async (listingId) => {
+    try {
+      console.log("=== Deleting Listing ===")
+      console.log("Listing ID:", listingId)
+
+      const confirmed = window.confirm("Are you sure you want to delete this listing?")
+      if (!confirmed) return
+
+      const res = await fetch(`/api/listing/delete/${listingId}`, {
+        method: "DELETE",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          // Add Authorization header as backup
+          ...(document.cookie.includes("access_token") && {
+            Authorization: `Bearer ${
+              document.cookie
+                .split("; ")
+                .find((row) => row.startsWith("access_token="))
+                ?.split("=")[1]
+            }`,
+          }),
+        },
+      })
+
+      if (res.status === 401) {
+        setShowListingsError("Your session has expired. Please log in again.")
+        return
+      }
+
+      if (!res.ok) {
+        const errorText = await res.text()
+        throw new Error(`Failed to delete listing: ${res.status} ${errorText}`)
+      }
+
+      console.log("✅ Listing deleted successfully")
+      setUserListings((prev) => prev.filter((listing) => listing._id !== listingId))
+      alert("Listing deleted successfully!")
+    } catch (error) {
+      console.error("❌ Error deleting listing:", error)
+      alert(`Error deleting listing: ${error.message}`)
+    }
+  }
 
   const handleImageSubmit = () => {
     if (files.length > 0 && files.length + formData.imageUrls.length < 7) {
-      setUploading(true);
-      setImageUploadError(false);
-      const promises = [];
+      setUploading(true)
+      setImageUploadError(false)
+      const promises = []
 
       for (let i = 0; i < files.length; i++) {
-        promises.push(storeImage(files[i]));
+        promises.push(storeImage(files[i]))
       }
       Promise.all(promises)
         .then((urls) => {
           setFormData({
             ...formData,
             imageUrls: formData.imageUrls.concat(urls),
-          });
-          setImageUploadError(false);
-          setUploading(false);
+          })
+          setImageUploadError(false)
+          setUploading(false)
         })
         .catch(() => {
-          setImageUploadError("Image upload failed (2MB max per image )");
-          setUploading(false);
+          setImageUploadError("Image upload failed (2MB max per image )")
+          setUploading(false)
 
           setTimeout(() => {
-            setImageUploadError(false);
-          }, 4000); 
-        });
+            setImageUploadError(false)
+          }, 4000)
+        })
     } else {
-      setImageUploadError("You can only upload up to 6 images per listing");
-      setUploading(false);
+      setImageUploadError("You can only upload up to 6 images per listing")
+      setUploading(false)
 
       setTimeout(() => {
-        setImageUploadError(false);
-      }, 4000);
+        setImageUploadError(false)
+      }, 4000)
     }
-  };
+  }
 
   const storeImage = async (file) => {
     return new Promise((resolve, reject) => {
-      const storage = getStorage(app);
-      const fileName = new Date().getTime() + file.name;
-      const storageRef = ref(storage, fileName);
-      const uploadTask = uploadBytesResumable(storageRef, file);
+      const storage = getStorage(app)
+      const fileName = new Date().getTime() + file.name
+      const storageRef = ref(storage, fileName)
+      const uploadTask = uploadBytesResumable(storageRef, file)
       uploadTask.on(
         "state_changed",
         (snapshot) => {
-          const progress =
-            (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-          console.log(`Upload is ${progress}% done`);
+          const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100
+          console.log(`Upload is ${progress}% done`)
         },
         (error) => {
-          reject(error);
+          reject(error)
         },
         () => {
           getDownloadURL(uploadTask.snapshot.ref).then((downloadURL) => {
-            resolve(downloadURL);
-          });
-        }
-      );
-    });
-  };
+            resolve(downloadURL)
+          })
+        },
+      )
+    })
+  }
 
   const handleRemoveImage = (index) => {
     setFormData({
       ...formData,
       imageUrls: formData.imageUrls.filter((_, i) => i !== index),
-    });
-  };
+    })
+  }
 
   const handleChange = (e) => {
     if (e.target.id === "sale" || e.target.id === "rent") {
       setFormData({
         ...formData,
         type: e.target.id,
-      });
+      })
     }
 
-    if (
-      e.target.id === "parking" ||
-      e.target.id === "furnished" ||
-      e.target.id === "offer"
-    ) {
+    if (e.target.id === "parking" || e.target.id === "furnished" || e.target.id === "offer") {
       setFormData({
         ...formData,
         [e.target.id]: e.target.checked,
-      });
+      })
     }
 
     if (
       e.target.type === "number" ||
       e.target.type === "text" ||
-      e.target.type === "textarea"
+      e.target.type === "textarea" ||
+      e.target.type === "select-one"
     ) {
       setFormData({
         ...formData,
         [e.target.id]: e.target.value,
-      });
+      })
     }
-  };
+  }
 
   const handleSubmit = async (e) => {
-    e.preventDefault();
+    e.preventDefault()
     try {
-      if (formData.imageUrls.length < 1)
-        return setError("You must upload at least one image");
+      if (formData.imageUrls.length < 1) return setError("You must upload at least one image")
       if (+formData.regularPrice < +formData.discountPrice)
-        return setError("Discount price must be lower than regular price");
-      setLoading(true);
-      setError(false);
+        return setError("Discount price must be lower than regular price")
+
+      setLoading(true)
+      setError(false)
+
+      console.log("Submitting listing with data:", formData)
+
       const res = await fetch("/api/listing/create", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
+        credentials: "include",
         body: JSON.stringify({
           ...formData,
           userRef: currentUser._id,
         }),
-      });
-      const data = await res.json();
-      setLoading(false);
-      if (data.success === false) {
-        setError(data.message);
+      })
+
+      const data = await res.json()
+      console.log("Server response:", data)
+
+      setLoading(false)
+
+      if (data.success === false || !res.ok) {
+        console.error("Error creating listing:", data.message)
+        setError(data.message || "Failed to create listing")
+        return
       }
-      navigate(`/listing/${data._id}`);
+
+      console.log("Listing created successfully:", data)
+      alert("Listing created successfully! Redirecting to listing page...")
+      navigate(`/listing/${data._id}`)
     } catch (error) {
-      setError(error.message);
-      setLoading(false);
+      console.error("Error in handleSubmit:", error)
+      setError(error.message || "An error occurred while creating the listing")
+      setLoading(false)
     }
-  };
-  
+  }
+
+  useEffect(() => {
+    handleShowListings()
+  }, [])
+
   return (
     <main className="p-3 max-w-4xl mx-auto bg-white mt-12">
-      <h1 className="text-3xl font-semibold text-center my-7 text-slate-700">
-        {" "}
-        Create Listing
-      </h1>
+      <h1 className="text-3xl font-semibold text-center my-7 text-slate-700"> Create Listing</h1>
       <hr className="mb-8" />
+
+      {/* Show Listings Section */}
+      <div className="mb-8">
+        <button
+          onClick={handleShowListings}
+          disabled={loadingListings}
+          className="bg-green-700 text-white p-3 rounded-lg uppercase hover:opacity-95 disabled:opacity-80 w-full"
+        >
+          {loadingListings ? "Loading..." : "Show My Listings"}
+        </button>
+
+        {showListingsError && (
+          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mt-4">
+            <strong>Error:</strong> {showListingsError}
+            {showListingsError.includes("session has expired") && (
+              <div className="mt-2">
+                <button
+                  onClick={() => navigate("/sign-in")}
+                  className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700"
+                >
+                  Go to Login
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {userListings && userListings.length > 0 && (
+          <div className="mt-4">
+            <h2 className="text-2xl font-semibold mb-4">Your Listings</h2>
+            <div className="flex flex-col gap-4">
+              {userListings.map((listing) => (
+                <div key={listing._id} className="border rounded-lg p-3 flex justify-between items-center">
+                  <div className="flex items-center gap-4">
+                    <img
+                      src={listing.imageUrls[0] || "/placeholder.svg"}
+                      alt="listing cover"
+                      className="h-16 w-16 object-contain"
+                    />
+                    <div>
+                      <p className="text-slate-700 font-semibold hover:underline truncate">{listing.name}</p>
+                      <p className="text-sm text-gray-600">{listing.address}</p>
+                      <p className="text-sm text-blue-600 font-medium">
+                        {listing.currency === "UGX" ? "UGX" : "$"} {listing.regularPrice.toLocaleString()}
+                        {listing.type === "rent" ? "/month" : ""}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex flex-col items-center">
+                    <button
+                      onClick={() => handleListingDelete(listing._id)}
+                      className="text-red-700 uppercase hover:opacity-75"
+                    >
+                      Delete
+                    </button>
+                    <button
+                      onClick={() => navigate(`/update-listing/${listing._id}`)}
+                      className="text-green-700 uppercase hover:opacity-75"
+                    >
+                      Edit
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
       <form onSubmit={handleSubmit} className="flex flex-col sm:flex-row gap-4">
         <div className="flex flex-col gap-4 flex-1">
           <input
@@ -224,13 +421,7 @@ const CreateListing = () => {
               <span>Rent</span>
             </div>
             <div className="flex gap-2">
-              <input
-                type="checkbox"
-                id="parking"
-                className="w-5"
-                onChange={handleChange}
-                checked={formData.parking}
-              />
+              <input type="checkbox" id="parking" className="w-5" onChange={handleChange} checked={formData.parking} />
               <span>Parking spot</span>
             </div>
             <div className="flex gap-2">
@@ -244,13 +435,7 @@ const CreateListing = () => {
               <span>Furnished</span>
             </div>
             <div className="flex gap-2">
-              <input
-                type="checkbox"
-                id="offer"
-                className="w-5"
-                onChange={handleChange}
-                checked={formData.offer}
-              />
+              <input type="checkbox" id="offer" className="w-5" onChange={handleChange} checked={formData.offer} />
               <span>Offer</span>
             </div>
           </div>
@@ -281,12 +466,27 @@ const CreateListing = () => {
               />
               <p>Baths</p>
             </div>
+
+            {/* Currency Selection */}
+            <div className="flex items-center gap-2">
+              <select
+                id="currency"
+                className="p-3 border border-slate-700 rounded-lg"
+                onChange={handleChange}
+                value={formData.currency}
+              >
+                <option value="UGX">UGX (Ugandan Shilling)</option>
+                <option value="USD">USD (US Dollar)</option>
+              </select>
+              <p>Currency</p>
+            </div>
+
             <div className="flex items-center gap-2">
               <input
                 type="number"
                 id="regularPrice"
                 min="50"
-                max="1000000"
+                max="10000000"
                 required
                 className="p-3 border border-slate-700 rounded-lg"
                 onChange={handleChange}
@@ -295,7 +495,10 @@ const CreateListing = () => {
               <div className="flex flex-col items-center">
                 <p>Regular price</p>
               </div>
-              <span className="text-xs">($/month)</span>
+              <span className="text-xs">
+                ({formData.currency === "UGX" ? "UGX" : "$"}
+                {formData.type === "rent" ? "/month" : ""})
+              </span>
             </div>
 
             {formData.offer && (
@@ -304,7 +507,7 @@ const CreateListing = () => {
                   type="number"
                   id="discountPrice"
                   min="0"
-                  max="1000000"
+                  max="10000000"
                   required
                   className="p-3 border border-slate-700 rounded-lg"
                   onChange={handleChange}
@@ -313,7 +516,10 @@ const CreateListing = () => {
                 <div className="flex flex-col items-center">
                   <p>Discounted price</p>
                 </div>
-                <span className="text-xs">($/month)</span>
+                <span className="text-xs">
+                  ({formData.currency === "UGX" ? "UGX" : "$"}
+                  {formData.type === "rent" ? "/month" : ""})
+                </span>
               </div>
             )}
           </div>
@@ -322,9 +528,7 @@ const CreateListing = () => {
         <div className="flex flex-col flex-1 gap-4">
           <p className="font-semibold">
             Images:
-            <span className="font-normal text-gray-600 ml-2">
-              The first image will be the cover (max 6)
-            </span>
+            <span className="font-normal text-gray-600 ml-2">The first image will be the cover (max 6)</span>
           </p>
           <div className="flex gap-4">
             <input
@@ -344,17 +548,12 @@ const CreateListing = () => {
               {uploading ? "Uploading..." : "Upload"}
             </button>
           </div>
-          <p className="text-red-700 text-sm">
-            {imageUploadError && imageUploadError}
-          </p>
+          <p className="text-red-700 text-sm">{imageUploadError && imageUploadError}</p>
           {formData.imageUrls.length > 0 &&
             formData.imageUrls.map((url, index) => (
-              <div
-                key={url}
-                className="flex justify-between p-3 border border-slate-700 items-center rounded-lg"
-              >
+              <div key={url} className="flex justify-between p-3 border border-slate-700 items-center rounded-lg">
                 <img
-                  src={url}
+                  src={url || "/placeholder.svg"}
                   alt="listing image"
                   className="w-20 h-20 object-contain rounded-lg "
                 />
@@ -373,12 +572,20 @@ const CreateListing = () => {
           >
             {loading ? "Creating..." : "Create Listing"}
           </button>
-          {error && <p className="text-red-700 text-sm">{error}</p>}
+          {error && (
+            <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+              <strong>Error:</strong> {error}
+            </div>
+          )}
+          {loading && (
+            <div className="bg-blue-100 border border-blue-400 text-blue-700 px-4 py-3 rounded mb-4">
+              Creating your listing... Please wait.
+            </div>
+          )}
         </div>
       </form>
-      
     </main>
-  );
-};
+  )
+}
 
-export default CreateListing;
+export default CreateListing

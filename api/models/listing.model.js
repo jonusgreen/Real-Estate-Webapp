@@ -71,6 +71,12 @@ const listingSchema = new mongoose.Schema(
       type: String,
       default: null,
     },
+    currency: {
+      type: String,
+      enum: ["USD", "UGX"],
+      default: "UGX",
+      required: true,
+    },
   },
   { timestamps: true },
 )

@@ -24,15 +24,46 @@ export default function AdminListingApprovals() {
     fetchPendingListings()
   }, [currentUser, navigate])
 
+  // Helper function to make authenticated requests
+  const makeAuthenticatedRequest = async (url, options = {}) => {
+    const token = document.cookie
+      .split("; ")
+      .find((row) => row.startsWith("access_token="))
+      ?.split("=")[1]
+
+    console.log("Making authenticated request to:", url)
+    console.log("Token found:", !!token)
+    console.log("Current user:", currentUser?.email, "Admin:", currentUser?.isAdmin)
+
+    const defaultOptions = {
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+        ...(token && { Authorization: `Bearer ${token}` }),
+        ...options.headers,
+      },
+    }
+
+    const response = await fetch(url, { ...defaultOptions, ...options })
+
+    console.log("Response status:", response.status)
+
+    if (response.status === 401) {
+      console.error("Authentication failed - token may be expired")
+      setError("Authentication failed. Please refresh the page or log in again.")
+      throw new Error("Authentication failed. Please refresh the page or log in again.")
+    }
+
+    return response
+  }
+
   const fetchPendingListings = async () => {
     try {
       setLoading(true)
       setError(null)
 
       console.log("Fetching pending listings...")
-      const res = await fetch("/api/listing/get?approved=false", {
-        credentials: "include",
-      })
+      const res = await makeAuthenticatedRequest("/api/listing/get?approved=false")
 
       if (!res.ok) {
         throw new Error(`Failed to fetch pending listings: ${res.status} ${res.statusText}`)
@@ -61,20 +92,24 @@ export default function AdminListingApprovals() {
   const handleApproveListing = async (listingId) => {
     try {
       setProcessingId(listingId)
-      const res = await fetch(`/api/listing/approve/${listingId}`, {
+      setError(null)
+
+      console.log("Approving listing:", listingId)
+      const res = await makeAuthenticatedRequest(`/api/listing/approve/${listingId}`, {
         method: "POST",
-        credentials: "include",
       })
 
       if (!res.ok) {
+        const errorText = await res.text()
+        console.error("Approve failed:", res.status, errorText)
         throw new Error(`Failed to approve listing: ${res.status} ${res.statusText}`)
       }
 
       const approvedListing = await res.json()
-      console.log("Listing approved:", approvedListing)
+      console.log("Listing approved successfully:", approvedListing)
 
       // Remove the approved listing from the list
-      setPendingListings(pendingListings.filter((listing) => listing._id !== listingId))
+      setPendingListings((prevListings) => prevListings.filter((listing) => listing._id !== listingId))
 
       // Show success message
       alert(`Listing "${approvedListing.name}" has been approved and is now live!`)
@@ -82,7 +117,7 @@ export default function AdminListingApprovals() {
       setProcessingId(null)
     } catch (error) {
       console.error("Error approving listing:", error)
-      setError("Failed to approve listing. Please try again later.")
+      setError(`Failed to approve listing: ${error.message}`)
       setProcessingId(null)
     }
   }
@@ -90,28 +125,29 @@ export default function AdminListingApprovals() {
   const handleRejectListing = async (listingId) => {
     try {
       setProcessingId(listingId)
-      const res = await fetch(`/api/listing/reject/${listingId}`, {
+      setError(null)
+
+      console.log("Rejecting listing:", listingId)
+      const res = await makeAuthenticatedRequest(`/api/listing/reject/${listingId}`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
         body: JSON.stringify({ reason: rejectionReason }),
-        credentials: "include",
       })
 
       if (!res.ok) {
+        const errorText = await res.text()
+        console.error("Reject failed:", res.status, errorText)
         throw new Error(`Failed to reject listing: ${res.status} ${res.statusText}`)
       }
 
       const rejectedListing = await res.json()
-      console.log("Listing rejected:", rejectedListing)
+      console.log("Listing rejected successfully:", rejectedListing)
 
       // Reset rejection state
       setRejectionReason("")
       setRejectingId(null)
 
       // Remove the rejected listing from the list
-      setPendingListings(pendingListings.filter((listing) => listing._id !== listingId))
+      setPendingListings((prevListings) => prevListings.filter((listing) => listing._id !== listingId))
 
       // Show success message
       alert(`Listing "${rejectedListing.name}" has been rejected.`)
@@ -119,7 +155,7 @@ export default function AdminListingApprovals() {
       setProcessingId(null)
     } catch (error) {
       console.error("Error rejecting listing:", error)
-      setError("Failed to reject listing. Please try again later.")
+      setError(`Failed to reject listing: ${error.message}`)
       setProcessingId(null)
     }
   }
@@ -132,12 +168,16 @@ export default function AdminListingApprovals() {
       if (!confirmed) return
 
       setLoading(true)
-      const res = await fetch("/api/listing/bulk-approve", {
+      setError(null)
+
+      console.log("Starting bulk approve...")
+      const res = await makeAuthenticatedRequest("/api/listing/bulk-approve", {
         method: "POST",
-        credentials: "include",
       })
 
       if (!res.ok) {
+        const errorText = await res.text()
+        console.error("Bulk approve failed:", res.status, errorText)
         throw new Error(`Failed to bulk approve listings: ${res.status} ${res.statusText}`)
       }
 
@@ -153,9 +193,43 @@ export default function AdminListingApprovals() {
       setLoading(false)
     } catch (error) {
       console.error("Error bulk approving listings:", error)
-      setError("Failed to bulk approve listings. Please try again later.")
+      setError(`Failed to bulk approve listings: ${error.message}`)
       setLoading(false)
     }
+  }
+
+  const handleRefreshAuth = () => {
+    window.location.reload()
+  }
+
+  // Add authentication check component
+  if (!currentUser) {
+    return (
+      <div className="text-center py-8">
+        <div className="bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 rounded mb-4">
+          Please log in to access admin features.
+        </div>
+        <button
+          onClick={() => navigate("/sign-in")}
+          className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+        >
+          Go to Login
+        </button>
+      </div>
+    )
+  }
+
+  if (!currentUser.isAdmin) {
+    return (
+      <div className="text-center py-8">
+        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+          Access denied. Admin privileges required.
+        </div>
+        <button onClick={() => navigate("/")} className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
+          Go to Home
+        </button>
+      </div>
+    )
   }
 
   if (loading) {
@@ -170,12 +244,14 @@ export default function AdminListingApprovals() {
     return (
       <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
         {error}
-        <button
-          onClick={fetchPendingListings}
-          className="ml-4 bg-red-600 text-white px-3 py-1 rounded hover:bg-red-700"
-        >
-          Retry
-        </button>
+        <div className="mt-2 flex gap-2">
+          <button onClick={fetchPendingListings} className="bg-red-600 text-white px-3 py-1 rounded hover:bg-red-700">
+            Retry
+          </button>
+          <button onClick={handleRefreshAuth} className="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700">
+            Refresh Page
+          </button>
+        </div>
       </div>
     )
   }

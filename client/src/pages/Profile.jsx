@@ -18,18 +18,82 @@ function Profile() {
   const [updateSuccess, setUpdateSuccess] = useState(false)
   const [userListings, setUserListings] = useState([])
   const [showListingsError, setShowListingsError] = useState(false)
+  const [phoneError, setPhoneError] = useState("")
+  const [phoneValue, setPhoneValue] = useState("")
   const dispatch = useDispatch()
 
-  /***************************** HANDLE FILE UPLOAD USEEFFECT *****************************/
-  /* 
- 1. useEffect for triggering the file upload function when the file state changes. The state changes when the user selects a file to upload. When a user selects a file, the file state is updated with the selected file triggering a rerender of the component initiating a file upload to Firebase.
-*/
+  /***************************** PHONE FORMATTING FUNCTIONS *****************************/
+  const formatPhoneNumber = (value) => {
+    const phoneNumber = value.replace(/\D/g, "")
 
+    // Uganda phone number formatting
+    if (phoneNumber.length === 0) return ""
+    if (phoneNumber.startsWith("256")) {
+      // International format: +256 XXX XXX XXX
+      if (phoneNumber.length <= 3) return `+${phoneNumber}`
+      if (phoneNumber.length <= 6) return `+${phoneNumber.slice(0, 3)} ${phoneNumber.slice(3)}`
+      if (phoneNumber.length <= 9)
+        return `+${phoneNumber.slice(0, 3)} ${phoneNumber.slice(3, 6)} ${phoneNumber.slice(6)}`
+      return `+${phoneNumber.slice(0, 3)} ${phoneNumber.slice(3, 6)} ${phoneNumber.slice(6, 9)} ${phoneNumber.slice(9, 12)}`
+    } else if (phoneNumber.startsWith("0")) {
+      // Local format: 0XXX XXX XXX
+      if (phoneNumber.length <= 4) return phoneNumber
+      if (phoneNumber.length <= 7) return `${phoneNumber.slice(0, 4)} ${phoneNumber.slice(4)}`
+      return `${phoneNumber.slice(0, 4)} ${phoneNumber.slice(4, 7)} ${phoneNumber.slice(7, 10)}`
+    } else {
+      // Assume local without leading 0
+      if (phoneNumber.length <= 3) return phoneNumber
+      if (phoneNumber.length <= 6) return `${phoneNumber.slice(0, 3)} ${phoneNumber.slice(3)}`
+      return `${phoneNumber.slice(0, 3)} ${phoneNumber.slice(3, 6)} ${phoneNumber.slice(6, 9)}`
+    }
+  }
+
+  const validatePhoneNumber = (phone) => {
+    const cleanPhone = phone.replace(/\D/g, "")
+
+    if (!cleanPhone) return { isValid: true, error: "" }
+
+    // Uganda phone number validation
+    if (cleanPhone.startsWith("256")) {
+      if (cleanPhone.length !== 12) {
+        return { isValid: false, error: "Uganda phone number with +256 must be 12 digits total" }
+      }
+      const localPart = cleanPhone.slice(3)
+      if (!/^[734]\d{8}$/.test(localPart)) {
+        return { isValid: false, error: "Please enter a valid Uganda phone number" }
+      }
+    } else if (cleanPhone.startsWith("0")) {
+      if (cleanPhone.length !== 10) {
+        return { isValid: false, error: "Uganda phone number starting with 0 must be 10 digits" }
+      }
+      if (!/^0[734]\d{8}$/.test(cleanPhone)) {
+        return { isValid: false, error: "Please enter a valid Uganda phone number" }
+      }
+    } else {
+      if (cleanPhone.length !== 9) {
+        return { isValid: false, error: "Uganda phone number must be 9 digits" }
+      }
+      if (!/^[734]\d{8}$/.test(cleanPhone)) {
+        return { isValid: false, error: "Please enter a valid Uganda phone number" }
+      }
+    }
+
+    return { isValid: true, error: "" }
+  }
+
+  /***************************** HANDLE FILE UPLOAD USEEFFECT *****************************/
   useEffect(() => {
     if (file) {
       handleFileUpload(file)
     }
   }, [file])
+
+  // Initialize phone value when component mounts
+  useEffect(() => {
+    if (currentUser?.phone) {
+      setPhoneValue(formatPhoneNumber(currentUser.phone))
+    }
+  }, [currentUser])
 
   // Fetch user listings when component mounts
   useEffect(() => {
@@ -39,15 +103,6 @@ function Profile() {
   }, [currentUser])
 
   /*************************   HANDLE FILE UPLOAD FUNCTION   ****************************/
-  /* 
- 1. Get the storage reference from the firebase app
- 2. Create a new file name by concatenating the current time and the file name you want to upload to the storage bucket in firebase. The time part is to ensure that the file name is unique
- 3. Create a reference to the file in the storage bucket
- 4. Create a new upload task to upload the file to the storage bucket
- 5. Listen for state changes in the upload task. If the state changes, calculate the upload progress and set the filePerc state to the progress percentage
- 6. If there is an error during the upload, set the fileUploadError state to true
- 7. If the upload is successful, get the download URL of the uploaded file and set the avatar in the formData state to the download URL
- */
   const handleFileUpload = (file) => {
     const storage = getStorage(app)
     const fileName = new Date().getTime() + file.name
@@ -70,28 +125,42 @@ function Profile() {
   }
 
   /*****************************    HANDLE CHANGE FUNCTION   ******************************/
-
   const handleChange = (e) => {
-    setFormData({ ...formData, [e.target.id]: e.target.value })
+    const { id, value } = e.target
+
+    if (id === "phone") {
+      // Format the phone number for display
+      const formattedPhone = formatPhoneNumber(value)
+      setPhoneValue(formattedPhone)
+
+      // Validate the phone number
+      const validation = validatePhoneNumber(value)
+      setPhoneError(validation.error)
+
+      // Store clean phone number in form data
+      const cleanPhone = value.replace(/\D/g, "")
+      setFormData({ ...formData, phone: cleanPhone || undefined })
+      return
+    }
+
+    setFormData({ ...formData, [id]: value })
   }
 
   /*****************************    HANDLE SUBMIT FUNCTION   ******************************/
-  /* 
-   1. API REQUEST TO UPDATE USER to api/user/update/:id to fetch the user data from the db
-   2. If the response is unsuccessful (ie if the user data is NOT updated), dispatch updateUserFailure action with the error message
-   3. Clear the error message after 4 seconds
-   4. If the response is successful(ie if the user data is updated), dispatch updateUserSuccess action with the user data as payload to update the user state in the redux store.
-   5. Set the updateSuccess state to true to display a success message to the user for 4 seconds and then set it back to false after 4 seconds
-   6. If there is an error during the API request, dispatch updateUserFailure action with the error message
-   7. Clear the error message after 4 seconds
-   8. Set the updateSuccess state to false after 4 seconds
-   9. The updateSuccess is set to false after 4 seconds to clear any possible success message from the UI.
-   */
-
   const handleSubmit = async (e) => {
     e.preventDefault()
+
+    // Check for phone validation errors
+    if (phoneError) {
+      dispatch(updateUserFailure("Please fix the phone number error before submitting."))
+      return
+    }
+
     try {
       dispatch(updateUserStart())
+
+      console.log("Updating user with data:", formData)
+
       const response = await fetch(`/api/user/update/${currentUser._id}`, {
         method: "POST",
         headers: {
@@ -102,6 +171,8 @@ function Profile() {
       })
 
       const data = await response.json()
+      console.log("Update response:", data)
+
       if (data.success === false) {
         dispatch(updateUserFailure(data.message))
         setTimeout(() => {
@@ -117,12 +188,8 @@ function Profile() {
       }, 4000)
     } catch (error) {
       dispatch(updateUserFailure(error.message))
-
       setTimeout(() => {
         dispatch(updateUserFailure(null))
-      }, 4000)
-      setTimeout(() => {
-        setUpdateSuccess(false)
       }, 4000)
     }
   }
@@ -153,14 +220,6 @@ function Profile() {
   }
 
   /**************************    HANDLE LISTING DELETE FUNCTION   *********************/
-  /*
-1. API REQUEST TO DELETE LISTING to api/listing/delete/:id to delete the listing from the db
-2. If the response is unsuccessful (ie if the listing is NOT deleted), log the error message to the console
-3. If the response is successful(ie if the listing is deleted), filter the user listings to remove the deleted listing from the user listings
-4. If there is an error during the API request, dispatch deleteListingFailure action with the error message
-5. Clear the error message after 4 seconds
-*/
-
   const handleListingDelete = async (listingId) => {
     try {
       const response = await fetch(`/api/listing/delete/${listingId}`, {
@@ -214,31 +273,67 @@ function Profile() {
               ""
             )}
           </p>
+
           <input
             type="text"
-            placeholder="username"
+            placeholder="Username"
             defaultValue={currentUser.username}
             className="border p-3 rounded-lg"
             id="username"
             onChange={handleChange}
           />
+
           <input
-            type="text"
-            placeholder="email"
+            type="email"
+            placeholder="Email"
             defaultValue={currentUser.email}
             className="border p-3 rounded-lg"
             id="email"
             onChange={handleChange}
           />
+
+          {/* Enhanced phone number section */}
+          <div className="space-y-2">
+            <div className="relative">
+              <input
+                type="tel"
+                placeholder="Phone Number (e.g., +256 700 123 456 or 0700 123 456)"
+                value={phoneValue}
+                className={`border p-3 rounded-lg w-full ${phoneError ? "border-red-500" : ""}`}
+                id="phone"
+                onChange={handleChange}
+                maxLength={17}
+              />
+              {formData.phone && !phoneError && <div className="absolute right-3 top-3 text-green-500 text-lg">✓</div>}
+            </div>
+
+            {phoneError && (
+              <div className="flex items-center text-red-500 text-sm">
+                <span className="mr-1">⚠️</span>
+                <span>{phoneError}</span>
+              </div>
+            )}
+
+            {!phoneError && (formData.phone || currentUser.phone) && (
+              <div className="flex items-center text-green-600 text-sm">
+                <span className="mr-1">✓</span>
+                <span>Great! Tenants can call or WhatsApp you</span>
+              </div>
+            )}
+
+            <p className="text-gray-500 text-xs">Adding your phone number helps potential tenants contact you faster</p>
+          </div>
+
           <input
             type="password"
-            placeholder="password"
+            placeholder="Password"
             className="border p-3 rounded-lg"
             id="password"
             onChange={handleChange}
           />
+
           <button
-            disabled={loading}
+            disabled={loading || phoneError}
             className="bg-slate-700 text-white rounded-lg p-3 uppercase hover:opacity-95 disabled:opacity-80"
           >
             {loading ? "Loading..." : "Update"}

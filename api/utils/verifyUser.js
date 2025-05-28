@@ -1,5 +1,3 @@
-//For verifying a user before updating any of the CRUD
-import { errorHandler } from "./error.js"
 import jwt from "jsonwebtoken"
 
 export const verifyToken = async (req, res, next) => {
@@ -8,20 +6,22 @@ export const verifyToken = async (req, res, next) => {
     console.log("Request URL:", req.url)
     console.log("Request method:", req.method)
     console.log("All cookies:", req.cookies)
+    console.log("Authorization header:", req.headers.authorization)
     console.log("Raw cookie header:", req.headers.cookie)
-    console.log("User-Agent:", req.headers["user-agent"])
 
     // Try multiple ways to get the token
     let token =
-      req.cookies?.access_token || req.cookies?.["access_token"] || req.headers.authorization?.replace("Bearer ", "")
+      req.cookies?.access_token ||
+      req.cookies?.["access_token"] ||
+      (req.headers.authorization && req.headers.authorization.replace("Bearer ", ""))
 
-    // Also check if token is in a different cookie format
+    // Manual cookie parsing as fallback
     if (!token && req.headers.cookie) {
       const cookies = req.headers.cookie.split(";")
       for (const cookie of cookies) {
         const [name, value] = cookie.trim().split("=")
         if (name === "access_token") {
-          token = value
+          token = decodeURIComponent(value)
           break
         }
       }
@@ -31,18 +31,32 @@ export const verifyToken = async (req, res, next) => {
     console.log("Token value (first 20 chars):", token ? token.substring(0, 20) + "..." : "None")
 
     if (!token) {
-      console.log("No token provided")
+      console.log("❌ No token provided")
       console.log("Available cookies:", Object.keys(req.cookies || {}))
       console.log("Raw cookie string:", req.headers.cookie)
-      return next(errorHandler(401, "Unauthorized - No token provided"))
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized - No token provided",
+        debug: {
+          cookies: Object.keys(req.cookies || {}),
+          hasAuthHeader: !!req.headers.authorization,
+        },
+      })
     }
 
-    console.log("Token found, verifying with JWT_SECRET...")
+    console.log("🔍 Token found, verifying with JWT_SECRET...")
     jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
       if (err) {
-        console.log("Token verification failed:", err.message)
+        console.log("❌ Token verification failed:", err.message)
         console.log("JWT_SECRET exists:", !!process.env.JWT_SECRET)
-        return next(errorHandler(403, "Forbidden - Invalid token"))
+        return res.status(403).json({
+          success: false,
+          message: "Forbidden - Invalid token",
+          debug: {
+            error: err.message,
+            tokenLength: token.length,
+          },
+        })
       }
 
       console.log("✅ Token verified successfully!")
@@ -52,8 +66,14 @@ export const verifyToken = async (req, res, next) => {
       next()
     })
   } catch (error) {
-    console.error("Token verification error:", error)
-    return next(errorHandler(500, "Internal server error during authentication"))
+    console.error("❌ Token verification error:", error)
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error during authentication",
+      debug: {
+        error: error.message,
+      },
+    })
   }
 }
 

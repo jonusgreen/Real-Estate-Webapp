@@ -1,17 +1,14 @@
-import { useEffect, useState } from "react";
-import {
-  getDownloadURL,
-  getStorage,
-  ref,
-  uploadBytesResumable,
-} from "firebase/storage";
-import { app } from "../firebase.js";
-import { useSelector } from "react-redux";
-import { useNavigate, useParams } from "react-router-dom";
+"use client"
+
+import { useEffect, useState } from "react"
+import { getDownloadURL, getStorage, ref, uploadBytesResumable } from "firebase/storage"
+import { app } from "../firebase.js"
+import { useSelector } from "react-redux"
+import { useNavigate, useParams } from "react-router-dom"
 
 const CreateListing = () => {
-  const { currentUser } = useSelector((state) => state.user);
-  const [files, setFiles] = useState([]);
+  const { currentUser } = useSelector((state) => state.user)
+  const [files, setFiles] = useState([])
   const [formData, setFormData] = useState({
     imageUrls: [],
     name: "",
@@ -25,128 +22,124 @@ const CreateListing = () => {
     offer: false,
     parking: false,
     furnished: false,
-  });
-  const [imageUploadError, setImageUploadError] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [error, setError] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const navigate = useNavigate();
-  const params = useParams();
+    currency: "UGX", // Default to UGX
+  })
+  const [imageUploadError, setImageUploadError] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const [error, setError] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const navigate = useNavigate()
+  const params = useParams()
 
   useEffect(() => {
     const fetchListing = async () => {
-      const listingId = params.listingId; //Got listingId from the route in App.js.
-      const res = await fetch(`/api/listing/get/${listingId}`);
-      const data = await res.json(); //data is the listing object.
+      const listingId = params.listingId //Got listingId from the route in App.js.
+      const res = await fetch(`/api/listing/get/${listingId}`)
+      const data = await res.json() //data is the listing object.
       if (data.success === false) {
-        console.log(data.message);
+        console.log(data.message)
       }
-      setFormData(data);
-    };
+      setFormData(data)
+    }
 
-    fetchListing();
-  }, []);
+    fetchListing()
+  }, [])
 
   const handleImageSubmit = () => {
     if (files.length > 0 && files.length + formData.imageUrls.length < 7) {
-      setUploading(true);
-      setImageUploadError(false);
-      const promises = [];
+      setUploading(true)
+      setImageUploadError(false)
+      const promises = []
 
       for (let i = 0; i < files.length; i++) {
-        promises.push(storeImage(files[i]));
+        promises.push(storeImage(files[i]))
       }
       Promise.all(promises)
         .then((urls) => {
           setFormData({
             ...formData,
             imageUrls: formData.imageUrls.concat(urls),
-          });
-          setImageUploadError(false);
-          setUploading(false);
+          })
+          setImageUploadError(false)
+          setUploading(false)
         })
         .catch(() => {
-          setImageUploadError("Image upload failed (2MB max per image )");
-          setUploading(false);
-        });
+          setImageUploadError("Image upload failed (2MB max per image )")
+          setUploading(false)
+        })
     } else {
-      setImageUploadError("You can only upload up to 6 images per listing");
-      setUploading(false);
+      setImageUploadError("You can only upload up to 6 images per listing")
+      setUploading(false)
     }
-  };
+  }
 
   const storeImage = async (file) => {
     return new Promise((resolve, reject) => {
-      const storage = getStorage(app);
-      const fileName = new Date().getTime() + file.name;
-      const storageRef = ref(storage, fileName);
-      const uploadTask = uploadBytesResumable(storageRef, file);
+      const storage = getStorage(app)
+      const fileName = new Date().getTime() + file.name
+      const storageRef = ref(storage, fileName)
+      const uploadTask = uploadBytesResumable(storageRef, file)
       uploadTask.on(
         "state_changed",
         (snapshot) => {
-          const progress =
-            (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-          console.log(`Upload is ${progress}% done`);
+          const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100
+          console.log(`Upload is ${progress}% done`)
         },
         (error) => {
-          reject(error);
+          reject(error)
         },
         () => {
           getDownloadURL(uploadTask.snapshot.ref).then((downloadURL) => {
-            resolve(downloadURL);
-          });
-        }
-      );
-    });
-  };
+            resolve(downloadURL)
+          })
+        },
+      )
+    })
+  }
 
   const handleRemoveImage = (index) => {
     setFormData({
       ...formData,
       imageUrls: formData.imageUrls.filter((_, i) => i !== index),
-    });
-  };
+    })
+  }
 
   const handleChange = (e) => {
     if (e.target.id === "sale" || e.target.id === "rent") {
       setFormData({
         ...formData,
         type: e.target.id,
-      });
+      })
     }
 
-    if (
-      e.target.id === "parking" ||
-      e.target.id === "furnished" ||
-      e.target.id === "offer"
-    ) {
+    if (e.target.id === "parking" || e.target.id === "furnished" || e.target.id === "offer") {
       setFormData({
         ...formData,
         [e.target.id]: e.target.checked,
-      });
+      })
     }
 
     if (
       e.target.type === "number" ||
       e.target.type === "text" ||
-      e.target.type === "textarea"
+      e.target.type === "textarea" ||
+      e.target.type === "select-one"
     ) {
       setFormData({
         ...formData,
         [e.target.id]: e.target.value,
-      });
+      })
     }
-  };
+  }
 
   const handleSubmit = async (e) => {
-    e.preventDefault();
+    e.preventDefault()
     try {
-      if (formData.imageUrls.length < 1)
-        return setError("You must upload at least one image");
+      if (formData.imageUrls.length < 1) return setError("You must upload at least one image")
       if (+formData.regularPrice < +formData.discountPrice)
-        return setError("Discount price must be lower than regular price");
-      setLoading(true);
-      setError(false);
+        return setError("Discount price must be lower than regular price")
+      setLoading(true)
+      setError(false)
       const res = await fetch(`/api/listing/update/${params.listingId}`, {
         method: "POST",
         headers: {
@@ -156,18 +149,18 @@ const CreateListing = () => {
           ...formData,
           userRef: currentUser._id,
         }),
-      });
-      const data = await res.json();
-      setLoading(false);
+      })
+      const data = await res.json()
+      setLoading(false)
       if (data.success === false) {
-        setError(data.message);
+        setError(data.message)
       }
-      navigate(`/listing/${data._id}`);
+      navigate(`/listing/${data._id}`)
     } catch (error) {
-      setError(error.message);
-      setLoading(false);
+      setError(error.message)
+      setLoading(false)
     }
-  };
+  }
 
   return (
     <main className="p-3 max-w-4xl mx-auto bg-sage rounded-lg mt-5">
@@ -175,7 +168,6 @@ const CreateListing = () => {
       <form onSubmit={handleSubmit} className="flex flex-col sm:flex-row gap-4 mt-6">
         {/* Container with white background */}
         <div className="flex bg-slate-200 p-6 rounded-lg gap-6">
-  
           {/* First Div */}
           <div className="flex flex-col gap-4 flex-1">
             <input
@@ -249,13 +241,7 @@ const CreateListing = () => {
                 <span>Furnished</span>
               </div>
               <div className="flex gap-2">
-                <input
-                  type="checkbox"
-                  id="offer"
-                  className="w-5"
-                  onChange={handleChange}
-                  checked={formData.offer}
-                />
+                <input type="checkbox" id="offer" className="w-5" onChange={handleChange} checked={formData.offer} />
                 <span>Offer</span>
               </div>
             </div>
@@ -286,12 +272,27 @@ const CreateListing = () => {
                 />
                 <p>Baths</p>
               </div>
+
+              {/* Currency Selection */}
+              <div className="flex items-center gap-2">
+                <select
+                  id="currency"
+                  className="p-3 border border-gray-300 rounded-lg"
+                  onChange={handleChange}
+                  value={formData.currency || "UGX"}
+                >
+                  <option value="UGX">UGX (Ugandan Shilling)</option>
+                  <option value="USD">USD (US Dollar)</option>
+                </select>
+                <p>Currency</p>
+              </div>
+
               <div className="flex items-center gap-2">
                 <input
                   type="number"
                   id="regularPrice"
                   min="50"
-                  max="1000000"
+                  max="10000000"
                   required
                   className="p-3 border border-gray-300 rounded-lg"
                   onChange={handleChange}
@@ -300,16 +301,19 @@ const CreateListing = () => {
                 <div className="flex flex-col items-center">
                   <p>Regular price</p>
                 </div>
-                <span className="text-xs">($/month)</span>
+                <span className="text-xs">
+                  ({formData.currency === "UGX" ? "UGX" : "$"}
+                  {formData.type === "rent" ? "/month" : ""})
+                </span>
               </div>
-  
+
               {formData.offer && (
                 <div className="flex items-center gap-2">
                   <input
                     type="number"
                     id="discountPrice"
                     min="0"
-                    max="1000000"
+                    max="10000000"
                     required
                     className="p-3 border border-gray-300 rounded-lg"
                     onChange={handleChange}
@@ -318,19 +322,20 @@ const CreateListing = () => {
                   <div className="flex flex-col items-center">
                     <p>Discounted price</p>
                   </div>
-                  <span className="text-xs">($/month)</span>
+                  <span className="text-xs">
+                    ({formData.currency === "UGX" ? "UGX" : "$"}
+                    {formData.type === "rent" ? "/month" : ""})
+                  </span>
                 </div>
               )}
             </div>
           </div>
-  
+
           {/* Second Div */}
           <div className="flex flex-col flex-1 gap-4">
             <p className="font-semibold">
               Images:
-              <span className="font-normal text-gray-600 ml-2">
-                The first image will be the cover (max 6)
-              </span>
+              <span className="font-normal text-gray-600 ml-2">The first image will be the cover (max 6)</span>
             </p>
             <div className="flex gap-4">
               <input
@@ -350,17 +355,12 @@ const CreateListing = () => {
                 {uploading ? "Uploading..." : "Upload"}
               </button>
             </div>
-            <p className="text-red-700 text-sm">
-              {imageUploadError && imageUploadError}
-            </p>
+            <p className="text-red-700 text-sm">{imageUploadError && imageUploadError}</p>
             {formData.imageUrls.length > 0 &&
               formData.imageUrls.map((url, index) => (
-                <div
-                  key={url}
-                  className="flex justify-between p-3 border items-center bg-white rounded-lg gap-4"
-                >
+                <div key={url} className="flex justify-between p-3 border items-center bg-white rounded-lg gap-4">
                   <img
-                    src={url}
+                    src={url || "/placeholder.svg"}
                     alt="listing image"
                     className="w-20 h-20 object-contain rounded-lg "
                   />
@@ -384,7 +384,7 @@ const CreateListing = () => {
         </div>
       </form>
     </main>
-  );
-              }; 
+  )
+}
 
-export default CreateListing;
+export default CreateListing
