@@ -21,6 +21,7 @@ function Profile() {
   const [phoneError, setPhoneError] = useState("")
   const [phoneValue, setPhoneValue] = useState("")
   const dispatch = useDispatch()
+  const [listingsLoading, setListingsLoading] = useState(false)
 
   /***************************** PHONE FORMATTING FUNCTIONS *****************************/
   const formatPhoneNumber = (value) => {
@@ -170,6 +171,10 @@ function Profile() {
         body: JSON.stringify(formData),
       })
 
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+
       const data = await response.json()
       console.log("Update response:", data)
 
@@ -187,6 +192,7 @@ function Profile() {
         setUpdateSuccess(false)
       }, 4000)
     } catch (error) {
+      console.error("Update error:", error)
       dispatch(updateUserFailure(error.message))
       setTimeout(() => {
         dispatch(updateUserFailure(null))
@@ -197,25 +203,47 @@ function Profile() {
   /**************************    HANDLE SHOW LISTINGS FUNCTION   *********************/
   const handleShowListings = async () => {
     try {
+      setListingsLoading(true)
       setShowListingsError(false)
+      console.log("Fetching listings for user:", currentUser._id)
+
+      // Add a timeout to prevent infinite loading
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 10000) // 10 second timeout
+
       const response = await fetch(`/api/user/listings/${currentUser._id}`, {
         method: "GET",
         credentials: "include",
         headers: {
           "Content-Type": "application/json",
         },
+        signal: controller.signal,
       })
 
+      clearTimeout(timeoutId)
+      console.log("Response status:", response.status)
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error("API error response:", errorText)
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+
       const data = await response.json()
+      console.log("Listings data:", data)
 
       if (data.success === false) {
         setShowListingsError(true)
+        console.error("API returned error:", data.message)
         return
       }
 
       setUserListings(data)
     } catch (error) {
+      console.error("Error fetching listings:", error)
       setShowListingsError(true)
+    } finally {
+      setListingsLoading(false)
     }
   }
 
@@ -348,9 +376,10 @@ function Profile() {
       {/* Button to show listings */}
       <button
         onClick={handleShowListings}
-        className="bg-green-700 text-white p-3 rounded-lg uppercase text-center w-full max-w-lg mx-auto mt-5"
+        disabled={listingsLoading}
+        className="bg-green-700 text-white p-3 rounded-lg uppercase text-center w-full max-w-lg mx-auto mt-5 disabled:opacity-50"
       >
-        Show Listings
+        {listingsLoading ? "Loading..." : "Show Listings"}
       </button>
 
       {/* Display user listings */}

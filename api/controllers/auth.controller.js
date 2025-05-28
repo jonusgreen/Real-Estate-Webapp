@@ -9,6 +9,7 @@ export const signup = async (req, res, next) => {
 
   try {
     console.log("Signup attempt for email:", email)
+    console.log("Phone number received:", phone) // Debug log
 
     // Check if email already exists
     const existingEmailUser = await User.findOne({ email: email.toLowerCase() })
@@ -30,8 +31,8 @@ export const signup = async (req, res, next) => {
       })
     }
 
-    // Check if phone number already exists (if provided)
-    if (phone) {
+    // Check if phone number already exists (if provided and not empty)
+    if (phone && phone.trim() !== "") {
       const existingPhoneUser = await User.findOne({ phone })
       if (existingPhoneUser) {
         console.log("Phone number already exists:", phone)
@@ -45,16 +46,26 @@ export const signup = async (req, res, next) => {
     // Hash password
     const hashedPassword = bcryptjs.hashSync(password, 10)
 
-    // Create new user
-    const newUser = new User({
+    // Prepare user data
+    const userData = {
       username,
-      email: email.toLowerCase(), // Store email in lowercase
+      email: email.toLowerCase(),
       password: hashedPassword,
-      phone: phone || undefined, // Only include phone if provided
-    })
+    }
 
+    // Only add phone if it's provided and not empty
+    if (phone && phone.trim() !== "") {
+      userData.phone = phone
+    }
+
+    console.log("Creating user with data:", userData) // Debug log
+
+    // Create new user
+    const newUser = new User(userData)
     await newUser.save()
-    console.log("New user created successfully:", username)
+
+    console.log("New user created successfully:", newUser.username)
+    console.log("User phone saved as:", newUser.phone) // Debug log
 
     res.status(201).json({
       success: true,

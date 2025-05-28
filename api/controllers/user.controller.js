@@ -17,27 +17,47 @@ export const updateUser = async (req, res, next) => {
     return next(errorHandler(401, "You can only update your own account!"))
   }
   try {
+    console.log("Update request body:", req.body) // Debug log
+
     if (req.body.password) {
       req.body.password = bcryptjs.hashSync(req.body.password, 10)
     }
 
+    // Prepare update object
+    const updateData = {
+      username: req.body.username,
+      email: req.body.email,
+      avatar: req.body.avatar,
+    }
+
+    // Handle phone number - only update if provided
+    if (req.body.phone !== undefined) {
+      updateData.phone = req.body.phone || null // Store null if empty string
+    }
+
+    // Handle password - only update if provided
+    if (req.body.password) {
+      updateData.password = req.body.password
+    }
+
+    console.log("Update data being sent to database:", updateData) // Debug log
+
     const updatedUser = await User.findByIdAndUpdate(
       req.params.id,
-      {
-        $set: {
-          username: req.body.username,
-          email: req.body.email,
-          password: req.body.password,
-          avatar: req.body.avatar,
-        },
-      },
-      { new: true },
+      { $set: updateData },
+      { new: true, runValidators: true },
     )
 
+    if (!updatedUser) {
+      return next(errorHandler(404, "User not found"))
+    }
+
     const { password, ...rest } = updatedUser._doc
+    console.log("Updated user data:", rest) // Debug log
 
     res.status(200).json(rest)
   } catch (error) {
+    console.error("Update user error:", error) // Debug log
     next(error)
   }
 }
@@ -66,15 +86,27 @@ export const deleteUser = async (req, res, next) => {
 }
 
 export const getUserListings = async (req, res, next) => {
-  if (req.user.id === req.params.id) {
-    try {
-      const listings = await Listing.find({ userRef: req.params.id })
-      res.status(200).json(listings)
-    } catch (error) {
-      next(error)
+  try {
+    console.log("getUserListings called with ID:", req.params.id)
+    console.log("Authenticated user ID:", req.user.id)
+
+    // Check if user is admin or requesting their own listings
+    const isOwnListings = req.user.id === req.params.id
+    const isAdmin = req.user.isAdmin
+
+    if (!isOwnListings && !isAdmin) {
+      console.log("Unauthorized: User can only view their own listings")
+      return next(errorHandler(403, "You can only view your own listings!"))
     }
-  } else {
-    return next(errorHandler(401, "You can only view your own listings!"))
+
+    // Find listings for the requested user
+    const listings = await Listing.find({ userRef: req.params.id })
+    console.log(`Found ${listings.length} listings for user ${req.params.id}`)
+
+    res.status(200).json(listings)
+  } catch (error) {
+    console.error("Error in getUserListings:", error)
+    next(error)
   }
 }
 

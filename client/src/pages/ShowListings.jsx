@@ -17,7 +17,14 @@ export default function ShowListings() {
         setError(null)
 
         const res = await fetch(`/api/user/listings/${currentUser._id}`)
+
+        // Add these debug logs
+        console.log("User listings response status:", res.status)
+
         const data = await res.json()
+
+        // Add this debug log
+        console.log("User listings data:", data)
 
         if (data.success === false) {
           setError(data.message)

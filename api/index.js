@@ -6,149 +6,101 @@ import authRouter from "./routes/auth.route.js"
 import listingRouter from "./routes/listing.route.js"
 import cookieParser from "cookie-parser"
 import path from "path"
-import cors from "cors"
+import contactRouter from "./routes/contact.route.js"
+import debugRouter from "./routes/debug.route.js"
 import { fileURLToPath } from "url"
 
-dotenv.config()
-
-// Get __dirname equivalent in ES module
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
-const app = express()
-
-// CORS Configuration - Single, clean setup
-const allowedOrigins = [
-  "http://localhost:5173", // local dev
-  "http://localhost:3000", // local backend
-  "https://exela-realtors-islo.onrender.com", // production frontend
-  process.env.FRONTEND_URL, // environment variable fallback
+// Try to load .env from multiple possible locations
+const envPaths = [
+  path.join(__dirname, ".env"), // api/.env
+  path.join(__dirname, "..", ".env"), // root/.env
+  path.join(process.cwd(), ".env"), // current working directory
 ]
 
-app.use(
-  cors({
-    origin: (origin, callback) => {
-      // Allow requests with no origin (like mobile apps or curl requests)
-      if (!origin || allowedOrigins.includes(origin)) {
-        callback(null, true)
-      } else {
-        callback(new Error("Not allowed by CORS"))
-      }
-    },
-    credentials: true,
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "Cookie"],
-  }),
-)
-
-// Security headers for production
-app.use((req, res, next) => {
-  res.header("Access-Control-Allow-Credentials", "true")
-  if (process.env.NODE_ENV === "production") {
-    res.header("Cross-Origin-Embedder-Policy", "cross-origin")
-    res.header("Cross-Origin-Opener-Policy", "same-origin")
-  }
-  next()
-})
-
-// Improved MongoDB connection with better error handling
-const connectDB = async () => {
+let envLoaded = false
+for (const envPath of envPaths) {
   try {
-    const conn = await mongoose.connect(process.env.MONGO)
-    console.log(`MongoDB Connected: ${conn.connection.host}`)
-    return true
+    const result = dotenv.config({ path: envPath })
+    if (!result.error) {
+      console.log(`✅ Environment file loaded from: ${envPath}`)
+      envLoaded = true
+      break
+    }
   } catch (error) {
-    console.error(`Error connecting to MongoDB: ${error.message}`)
-    // Don't exit the process, just return false to indicate failure
-    return false
+    // Continue to next path
   }
 }
 
-// Connect to MongoDB
-connectDB()
+if (!envLoaded) {
+  console.log("⚠️  No .env file found, trying default dotenv.config()")
+  dotenv.config()
+}
 
-// Middleware
+// Debug environment variables
+console.log("Environment check:")
+console.log("NODE_ENV:", process.env.NODE_ENV || "not set")
+console.log("MONGO defined:", !!process.env.MONGO)
+console.log("PORT:", process.env.PORT || "not set")
+console.log("Current working directory:", process.cwd())
+console.log("__dirname:", __dirname)
+
+// Validate required environment variables
+if (!process.env.MONGO) {
+  console.error("❌ ERROR: MONGO environment variable is not defined!")
+  console.error("\n📝 Please create a .env file in your project root with:")
+  console.error("MONGO=mongodb://localhost:27017/estate-app")
+  console.error("JWT_SECRET=your_jwt_secret_here")
+  console.error("EMAIL_USERNAME=your_email@gmail.com")
+  console.error("EMAIL_PASSWORD=your_email_password")
+  console.error("PORT=3000")
+  console.error("ADMIN_SECRET_KEY=your_admin_secret")
+  console.error("NODE_ENV=development")
+  console.error("\n🔍 Checked these locations for .env file:")
+  envPaths.forEach((p) => console.error(`  - ${p}`))
+  process.exit(1)
+}
+
+mongoose
+  .connect(process.env.MONGO)
+  .then(() => {
+    console.log("✅ Connected to MongoDB!")
+  })
+  .catch((err) => {
+    console.error("❌ MongoDB connection error:", err)
+  })
+
+const app = express()
+
 app.use(express.json())
 app.use(cookieParser())
 
-// Add request logging middleware
-app.use((req, res, next) => {
-  const timestamp = new Date().toISOString()
-  console.log(`${timestamp} - ${req.method} ${req.path}`)
+const port = process.env.PORT || 3000
 
-  // Log cookies for debugging
-  if (req.cookies && Object.keys(req.cookies).length > 0) {
-    console.log("Cookies received:", Object.keys(req.cookies))
-    if (req.cookies.access_token) {
-      console.log("Access token present:", req.cookies.access_token ? "Yes" : "No")
-    }
-  } else {
-    console.log("No cookies received")
-  }
-
-  next()
+app.listen(port, () => {
+  console.log(`🚀 Server is running on port ${port}!`)
 })
 
-// Add basic diagnostic route
-app.get("/api/status", (req, res) => {
-  res.json({
-    status: "online",
-    database: mongoose.connection.readyState === 1 ? "connected" : "disconnected",
-    timestamp: new Date().toISOString(),
-    cookies: req.cookies ? Object.keys(req.cookies) : [],
-    hasAccessToken: !!req.cookies?.access_token,
-  })
-})
-
-// API routes
 app.use("/api/user", userRouter)
 app.use("/api/auth", authRouter)
 app.use("/api/listing", listingRouter)
+app.use("/api/contact", contactRouter)
+app.use("/api/debug", debugRouter)
 
-// Serve static assets if in production
-if (process.env.NODE_ENV === "production") {
-  // Serve static files with proper headers
-  app.use(
-    express.static(path.join(__dirname, "../client/dist"), {
-      maxAge: "1y",
-      etag: false,
-      setHeaders: (res, filePath) => {
-        if (filePath.endsWith(".js")) {
-          res.setHeader("Content-Type", "application/javascript")
-        }
-        if (filePath.endsWith(".css")) {
-          res.setHeader("Content-Type", "text/css")
-        }
-      },
-    }),
-  )
+app.use(express.static(path.join(__dirname, "..", "client", "dist")))
 
-  // Handle client-side routing - catch all handler
-  app.get("*", (req, res) => {
-    res.sendFile(path.join(__dirname, "../client/dist", "index.html"))
-  })
-} else {
-  app.get("/", (req, res) => {
-    res.send("API is running...")
-  })
-}
+app.get("*", (req, res) => {
+  res.sendFile(path.join(__dirname, "..", "client", "dist", "index.html"))
+})
 
-// Error handling middleware
 app.use((err, req, res, next) => {
-  console.error(`API Error: ${req.method} ${req.url}`)
-  console.error(`Error message: ${err.message}`)
-  console.error(err.stack)
-
   const statusCode = err.statusCode || 500
-  const message = err.message || "Internal server error"
+  const message = err.message || "Internal Server Error"
   return res.status(statusCode).json({
     success: false,
     statusCode,
     message,
   })
-})
-
-const PORT = process.env.PORT || 3000
-app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`)
 })

@@ -56,11 +56,21 @@ export default function Home() {
           fetch("/api/listing/get?type=sale&limit=4"),
         ])
 
+        // Add these debug logs
+        console.log("Offer response status:", offerRes.status)
+        console.log("Rent response status:", rentRes.status)
+        console.log("Sale response status:", saleRes.status)
+
         if (!offerRes.ok || !rentRes.ok || !saleRes.ok) {
           throw new Error("Failed to fetch listings")
         }
 
         const [offerData, rentData, saleData] = await Promise.all([offerRes.json(), rentRes.json(), saleRes.json()])
+
+        // Add these debug logs
+        console.log("Offer listings:", offerData)
+        console.log("Rent listings:", rentData)
+        console.log("Sale listings:", saleData)
 
         setOfferListings(Array.isArray(offerData) ? offerData : offerData.listings || [])
         setRentListings(Array.isArray(rentData) ? rentData : rentData.listings || [])

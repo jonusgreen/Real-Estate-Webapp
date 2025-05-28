@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { getDownloadURL, getStorage, ref, uploadBytesResumable } from "firebase/storage"
 import { app } from "../firebase.js"
 import { useSelector } from "react-redux"
@@ -9,9 +9,6 @@ import { useNavigate } from "react-router-dom"
 const CreateListing = () => {
   const { currentUser } = useSelector((state) => state.user)
   const [files, setFiles] = useState([])
-  const [userListings, setUserListings] = useState([])
-  const [showListingsError, setShowListingsError] = useState(false)
-  const [loadingListings, setLoadingListings] = useState(false)
   const [formData, setFormData] = useState({
     imageUrls: [],
     name: "",
@@ -34,122 +31,6 @@ const CreateListing = () => {
   const navigate = useNavigate()
 
   console.log(formData)
-
-  // Enhanced function to handle showing user listings with better auth
-  const handleShowListings = async () => {
-    try {
-      console.log("=== Fetching User Listings ===")
-      console.log("Current user:", currentUser)
-      console.log("User ID:", currentUser?._id)
-
-      if (!currentUser || !currentUser._id) {
-        setShowListingsError("Please log in to view your listings")
-        return
-      }
-
-      setShowListingsError(false)
-      setLoadingListings(true)
-
-      // Enhanced fetch with better error handling
-      const res = await fetch(`/api/user/listings/${currentUser._id}`, {
-        method: "GET",
-        credentials: "include",
-        headers: {
-          "Content-Type": "application/json",
-          // Add Authorization header as backup
-          ...(document.cookie.includes("access_token") && {
-            Authorization: `Bearer ${
-              document.cookie
-                .split("; ")
-                .find((row) => row.startsWith("access_token="))
-                ?.split("=")[1]
-            }`,
-          }),
-        },
-      })
-
-      console.log("Response status:", res.status)
-      console.log("Response headers:", res.headers)
-
-      if (res.status === 401) {
-        console.log("❌ 401 Unauthorized - Token may be expired")
-        setShowListingsError("Your session has expired. Please log in again.")
-        return
-      }
-
-      if (res.status === 403) {
-        console.log("❌ 403 Forbidden - Access denied")
-        setShowListingsError("Access denied. You can only view your own listings.")
-        return
-      }
-
-      if (!res.ok) {
-        const errorText = await res.text()
-        console.log("❌ Request failed:", res.status, errorText)
-        throw new Error(`HTTP ${res.status}: ${errorText}`)
-      }
-
-      const data = await res.json()
-      console.log("✅ Listings fetched successfully:", data)
-
-      if (data.length > 0) {
-        setUserListings(data)
-      } else {
-        setUserListings([])
-        console.log("No listings found for user")
-      }
-    } catch (error) {
-      console.error("❌ Error fetching listings:", error)
-      setShowListingsError(`Failed to load listings: ${error.message}`)
-    } finally {
-      setLoadingListings(false)
-    }
-  }
-
-  // Enhanced function to delete listings with better auth
-  const handleListingDelete = async (listingId) => {
-    try {
-      console.log("=== Deleting Listing ===")
-      console.log("Listing ID:", listingId)
-
-      const confirmed = window.confirm("Are you sure you want to delete this listing?")
-      if (!confirmed) return
-
-      const res = await fetch(`/api/listing/delete/${listingId}`, {
-        method: "DELETE",
-        credentials: "include",
-        headers: {
-          "Content-Type": "application/json",
-          // Add Authorization header as backup
-          ...(document.cookie.includes("access_token") && {
-            Authorization: `Bearer ${
-              document.cookie
-                .split("; ")
-                .find((row) => row.startsWith("access_token="))
-                ?.split("=")[1]
-            }`,
-          }),
-        },
-      })
-
-      if (res.status === 401) {
-        setShowListingsError("Your session has expired. Please log in again.")
-        return
-      }
-
-      if (!res.ok) {
-        const errorText = await res.text()
-        throw new Error(`Failed to delete listing: ${res.status} ${errorText}`)
-      }
-
-      console.log("✅ Listing deleted successfully")
-      setUserListings((prev) => prev.filter((listing) => listing._id !== listingId))
-      alert("Listing deleted successfully!")
-    } catch (error) {
-      console.error("❌ Error deleting listing:", error)
-      alert(`Error deleting listing: ${error.message}`)
-    }
-  }
 
   const handleImageSubmit = () => {
     if (files.length > 0 && files.length + formData.imageUrls.length < 7) {
@@ -291,82 +172,10 @@ const CreateListing = () => {
     }
   }
 
-  useEffect(() => {
-    handleShowListings()
-  }, [])
-
   return (
     <main className="p-3 max-w-4xl mx-auto bg-white mt-12">
       <h1 className="text-3xl font-semibold text-center my-7 text-slate-700"> Create Listing</h1>
       <hr className="mb-8" />
-
-      {/* Show Listings Section */}
-      <div className="mb-8">
-        <button
-          onClick={handleShowListings}
-          disabled={loadingListings}
-          className="bg-green-700 text-white p-3 rounded-lg uppercase hover:opacity-95 disabled:opacity-80 w-full"
-        >
-          {loadingListings ? "Loading..." : "Show My Listings"}
-        </button>
-
-        {showListingsError && (
-          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mt-4">
-            <strong>Error:</strong> {showListingsError}
-            {showListingsError.includes("session has expired") && (
-              <div className="mt-2">
-                <button
-                  onClick={() => navigate("/sign-in")}
-                  className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700"
-                >
-                  Go to Login
-                </button>
-              </div>
-            )}
-          </div>
-        )}
-
-        {userListings && userListings.length > 0 && (
-          <div className="mt-4">
-            <h2 className="text-2xl font-semibold mb-4">Your Listings</h2>
-            <div className="flex flex-col gap-4">
-              {userListings.map((listing) => (
-                <div key={listing._id} className="border rounded-lg p-3 flex justify-between items-center">
-                  <div className="flex items-center gap-4">
-                    <img
-                      src={listing.imageUrls[0] || "/placeholder.svg"}
-                      alt="listing cover"
-                      className="h-16 w-16 object-contain"
-                    />
-                    <div>
-                      <p className="text-slate-700 font-semibold hover:underline truncate">{listing.name}</p>
-                      <p className="text-sm text-gray-600">{listing.address}</p>
-                      <p className="text-sm text-blue-600 font-medium">
-                        {listing.currency === "UGX" ? "UGX" : "$"} {listing.regularPrice.toLocaleString()}
-                        {listing.type === "rent" ? "/month" : ""}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex flex-col items-center">
-                    <button
-                      onClick={() => handleListingDelete(listing._id)}
-                      className="text-red-700 uppercase hover:opacity-75"
-                    >
-                      Delete
-                    </button>
-                    <button
-                      onClick={() => navigate(`/update-listing/${listing._id}`)}
-                      className="text-green-700 uppercase hover:opacity-75"
-                    >
-                      Edit
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
 
       <form onSubmit={handleSubmit} className="flex flex-col sm:flex-row gap-4">
         <div className="flex flex-col gap-4 flex-1">
