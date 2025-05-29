@@ -26,7 +26,7 @@ export const createListing = async (req, res, next) => {
       approvedBy: isAdmin ? req.user.id : null,
     })
 
-    console.log(`Listing created: ${listing.name}, Approved: ${listing.approved}`)
+    console.log(`Listing created: ${listing.name}, Type: ${listing.type}, Approved: ${listing.approved}`)
     return res.status(201).json(listing)
   } catch (error) {
     console.error("Error creating listing:", error)
@@ -77,7 +77,7 @@ export const updateListing = async (req, res, next) => {
     }
 
     const updatedListing = await Listing.findByIdAndUpdate(req.params.id, req.body, { new: true })
-    console.log(`Listing updated: ${updatedListing.name}`)
+    console.log(`Listing updated: ${updatedListing.name}, Type: ${updatedListing.type}`)
     res.status(200).json(updatedListing)
   } catch (error) {
     console.error("Error updating listing:", error)
@@ -143,8 +143,10 @@ export const getListings = async (req, res, next) => {
       query.parking = true
     }
 
+    // Fix the type filtering - ensure exact match
     if (req.query.type && req.query.type !== "all") {
       query.type = req.query.type
+      console.log(`Filtering by type: ${req.query.type}`)
     }
 
     if (req.query.searchTerm) {
@@ -167,6 +169,11 @@ export const getListings = async (req, res, next) => {
     const total = await Listing.countDocuments(query)
 
     console.log(`Found ${listings.length} listings out of ${total} total`)
+    console.log(
+      `Listings types found:`,
+      listings.map((l) => `${l.name}: ${l.type}`),
+    )
+
     return res.status(200).json(listings)
   } catch (error) {
     console.error(`Error fetching listings: ${error.message}`)
@@ -272,8 +279,8 @@ export const getListingStats = async (req, res, next) => {
 
     const total = await Listing.countDocuments()
     const active = await Listing.countDocuments({ approved: true })
-    const forRent = await Listing.countDocuments({ type: "rent" })
-    const forSale = await Listing.countDocuments({ type: "sale" })
+    const forRent = await Listing.countDocuments({ type: "rent", approved: true })
+    const forSale = await Listing.countDocuments({ type: "sale", approved: true })
     const pendingApproval = await Listing.countDocuments({ approved: false })
 
     const revenueData = await Listing.aggregate([
@@ -288,7 +295,9 @@ export const getListingStats = async (req, res, next) => {
 
     const revenue = revenueData.length > 0 ? revenueData[0].total : 0
 
-    console.log(`Stats - Total: ${total}, Active: ${active}, Pending: ${pendingApproval}`)
+    console.log(
+      `Stats - Total: ${total}, Active: ${active}, For Rent: ${forRent}, For Sale: ${forSale}, Pending: ${pendingApproval}`,
+    )
 
     res.status(200).json({
       total,
